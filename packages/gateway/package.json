@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/proxy.ts",
-    "test": "tsx --test __tests__/wire.ts"
+    "test": "tsx --test __tests__/wire.ts __tests__/depin.ts",
+    "test:wire": "tsx --test __tests__/wire.ts",
+    "test:depin": "tsx --test __tests__/depin.ts"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

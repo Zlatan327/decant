@@ -1,8 +1,8 @@
 /**
  * client.ts — Decant Agent SDK.
  *
- * Lightweight client for AI agents to broadcast intents through the
- * Decant gateway.  Phase 1: raw HTTP transport with session headers.
+ * Lightweight client for AI agents to broadcast intents, authenticate through
+ * the Decant gateway, and consume streaming inference from Web3 DePIN compute providers.
  */
 
 import { randomBytes } from "node:crypto";
@@ -12,7 +12,7 @@ import { randomBytes } from "node:crypto";
 export interface DecantClientOptions {
   /** Gateway base URL (default: http://localhost:8080) */
   gatewayUrl?: string;
-  /** Pre-existing session key.  If omitted, an ephemeral key is generated. */
+  /** Pre-existing session key. If omitted, an ephemeral key is generated. */
   sessionKey?: string;
 }
 
@@ -20,6 +20,13 @@ export interface ProxyResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
+}
+
+export interface StreamResult {
+  status: number;
+  fullText: string;
+  tokens: number;
+  quotaRemaining?: number;
 }
 
 // ─── Client class ───────────────────────────────────────────────────────────
@@ -39,7 +46,7 @@ export class DecantClient {
   }
 
   /**
-   * Send a request through the Decant gateway.
+   * Send a standard request through the Decant gateway.
    *
    * @param path    Upstream path to hit via the proxy (e.g. "/get")
    * @param method  HTTP method (default: GET)
@@ -81,26 +88,109 @@ export class DecantClient {
 
   /**
    * Convenience: send a raw prompt payload through the proxy.
-   * In Phase 1 this just wraps it in a POST body.
    */
   async sendPrompt(prompt: string): Promise<ProxyResponse> {
     return this.request("/post", "POST", JSON.stringify({ prompt }));
   }
+
+  /**
+   * Stream Llama 3 inference progressively from a Web3 DePIN compute solver.
+   *
+   * Parses live Server-Sent Events (SSE) data chunks across the wire,
+   * invokes `onToken` for each token received, and returns the assembled text.
+   */
+  async streamChat(
+    prompt: string,
+    onToken?: (token: string) => void
+  ): Promise<StreamResult> {
+    const url = `${this.gatewayUrl}/v1/chat/completions`;
+    const payload = JSON.stringify({
+      model: "meta-llama/Meta-Llama-3-8B-Instruct",
+      prompt,
+      stream: true,
+    });
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-Decant-Session": this.sessionKey,
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+      },
+      body: payload,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return {
+        status: res.status,
+        fullText: errText,
+        tokens: 0,
+      };
+    }
+
+    const remainingHeader = res.headers.get("x-decant-quota-remaining");
+    const quotaRemaining = remainingHeader ? parseInt(remainingHeader, 10) : undefined;
+
+    let fullText = "";
+    let tokenCount = 0;
+
+    if (res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? ""; // keep incomplete tail in buffer
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const dataStr = trimmed.slice(5).trim();
+          if (dataStr === "[DONE]") continue;
+
+          try {
+            const parsed = JSON.parse(dataStr);
+            const token = parsed.choices?.[0]?.delta?.content;
+            if (token) {
+              fullText += token;
+              tokenCount += 1;
+              if (onToken) onToken(token);
+            }
+          } catch {
+            // Ignore malformed intermediate chunks
+          }
+        }
+      }
+    }
+
+    return {
+      status: res.status,
+      fullText,
+      tokens: tokenCount,
+      quotaRemaining,
+    };
+  }
 }
 
-// ─── CLI demo (run directly) ────────────────────────────────────────────────
+// ─── CLI demo ───────────────────────────────────────────────────────────────
 
 const isMainModule = process.argv[1]?.endsWith("client.ts") || process.argv[1]?.endsWith("client.js");
 if (isMainModule) {
   const client = new DecantClient();
   console.log(`[agent-sdk] session key: ${client.sessionKey}`);
   console.log(`[agent-sdk] gateway:     ${client.gatewayUrl}`);
-  console.log(`[agent-sdk] sending GET /get …`);
+  console.log(`[agent-sdk] testing connection to gateway...`);
 
   try {
     const res = await client.request("/get");
     console.log(`[agent-sdk] status: ${res.status}`);
-    console.log(`[agent-sdk] body:\n${res.body.slice(0, 500)}`);
+    console.log(`[agent-sdk] body:\n${res.body.slice(0, 300)}`);
   } catch (err) {
     console.error(`[agent-sdk] error:`, err);
     process.exit(1);

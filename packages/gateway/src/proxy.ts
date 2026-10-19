@@ -4,6 +4,7 @@
  * Phase 1: Forward authorised requests to a public endpoint (httpbin.org).
  * Phase 2: Enforce rate limiting and payload size constraints before forwarding.
  * Phase 3: Replace hardcoded session auth with on-chain NEAR contract view calls.
+ * Phase 4: Production Upgrades & DePIN Handshake (streaming Web3 Llama 3 compute).
  *
  * Runs on port 8080 by default (override with PORT env var).
  */
@@ -18,8 +19,8 @@ import { NearRpcClient } from "./near-rpc.js";
 const PORT = parseInt(process.env["PORT"] ?? "8080", 10);
 
 /**
- * The upstream target.  httpbin.org is a free, public HTTP echo service
- * that requires zero API keys — perfect for Phase 1 wire validation.
+ * Default upstream target. Can be configured to a public echo endpoint (httpbin.org)
+ * or a decentralized compute provider endpoint (Hyperbolic / Akash / Livepeer).
  */
 const UPSTREAM_HOST = process.env["UPSTREAM_HOST"] ?? "httpbin.org";
 const UPSTREAM_PORT = parseInt(process.env["UPSTREAM_PORT"] ?? "443", 10);
@@ -29,8 +30,6 @@ const UPSTREAM_HTTPS = (process.env["UPSTREAM_HTTPS"] ?? "true") === "true";
 const ENABLE_RATE_LIMIT = (process.env["ENABLE_RATE_LIMIT"] ?? "false") === "true";
 
 // Phase 3: Whether to enable on-chain NEAR quota verification.
-// When enabled, the gateway checks the NEAR contract for session registration
-// and remaining balance instead of just checking header presence.
 const ENABLE_NEAR_AUTH = (process.env["ENABLE_NEAR_AUTH"] ?? "false") === "true";
 
 // Cost in compute tokens per proxied request (deducted from on-chain quota).
@@ -96,21 +95,25 @@ async function handleRequest(clientReq: IncomingMessage, clientRes: ServerRespon
   const upstreamPath = clientReq.url ?? "/get";
   const doRequest = UPSTREAM_HTTPS ? httpsRequest : httpRequest;
 
+  const forwardHeaders: Record<string, string | string[] | undefined> = {
+    ...clientReq.headers,
+    host: `${UPSTREAM_HOST}:${UPSTREAM_PORT}`,
+    "user-agent": "decant-gateway/0.1",
+  };
+  delete forwardHeaders["connection"];
+
   const proxyReq = doRequest(
     {
       hostname: UPSTREAM_HOST,
       port: UPSTREAM_PORT,
       path: upstreamPath,
       method: clientReq.method,
-      headers: {
-        host: UPSTREAM_HOST,
-        "user-agent": "decant-gateway/0.1",
-        accept: clientReq.headers["accept"] ?? "application/json",
-      },
+      headers: forwardHeaders,
     },
     (proxyRes) => {
-      // Stream the upstream response back to the client
+      // Forward upstream status and headers (including text/event-stream for SSE)
       clientRes.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
+      // Stream chunks progressively without buffering
       proxyRes.pipe(clientRes, { end: true });
     }
   );
@@ -123,7 +126,7 @@ async function handleRequest(clientReq: IncomingMessage, clientRes: ServerRespon
     clientRes.end(JSON.stringify({ error: "Bad Gateway", detail: err.message }));
   });
 
-  // Pipe the client body to upstream (for POST, PUT, etc.)
+  // Pipe the client body to upstream (for POST, PUT, streaming prompts, etc.)
   clientReq.pipe(proxyReq, { end: true });
 }
 

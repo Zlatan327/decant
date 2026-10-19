@@ -14,6 +14,7 @@
     "build:contracts": "npm run build --workspace=packages/contracts",
     "test": "npm test --workspaces --if-present",
     "test:wire": "npm test --workspace=packages/gateway",
+    "test:depin": "npm run test:depin --workspace=packages/gateway",
     "test:unit:contracts": "npm run test:unit --workspace=packages/contracts",
     "test:sandbox": "npm run test:sandbox --workspace=packages/contracts",
     "dev:gateway": "npm run dev --workspace=packages/gateway",
