@@ -1,0 +1,25 @@
+{
+  "name": "decant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Decentralized intent settlement gateway for AI agent compute credit routing",
+  "workspaces": [
+    "packages/contracts",
+    "packages/gateway",
+    "packages/agent-sdk",
+    "packages/simulator"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:contracts": "npm run build --workspace=packages/contracts",
+    "test": "npm test --workspaces --if-present",
+    "test:wire": "npm test --workspace=packages/gateway",
+    "test:unit:contracts": "npm run test:unit --workspace=packages/contracts",
+    "test:sandbox": "npm run test:sandbox --workspace=packages/contracts",
+    "dev:gateway": "npm run dev --workspace=packages/gateway",
+    "simulate": "npm run start --workspace=packages/simulator"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

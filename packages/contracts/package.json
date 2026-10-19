@@ -1,0 +1,17 @@
+{
+  "name": "@decant/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NEAR smart contracts — ledger for intents, escrowed quotas, and reputations",
+  "scripts": {
+    "build": "cargo build --target wasm32-unknown-unknown --release",
+    "test:cargo": "cargo test",
+    "test:sandbox": "tsx --test tests/sandbox.ts",
+    "test": "npm run test:sandbox"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0"
+  }
+}
