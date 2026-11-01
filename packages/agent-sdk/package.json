@@ -1,0 +1,15 @@
+{
+  "name": "@decant/agent-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/client.js",
+  "scripts": {
+    "build": "tsc",
+    "demo": "tsx src/client.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0"
+  }
+}
