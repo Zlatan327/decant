@@ -5,3 +5,7 @@ target/
 .DS_Store
 *.env
 *.partial
+*.db
+*.db-wal
+*.db-shm
+*.db-journal

@@ -1,71 +1,91 @@
 /**
- * client.ts — Decant Agent SDK.
+ * client.ts — Decant Production Agent SDK.
  *
- * Lightweight client for AI agents to broadcast intents, authenticate through
- * the Decant gateway, and consume streaming inference from Web3 DePIN compute providers.
+ * Developer toolkit for autonomous AI agents to:
+ *   1. Generate cryptographic Ed25519 keypairs adhering to the NEAR protocol standard.
+ *   2. Cryptographically sign HTTP payloads (preventing tampering & replay attacks).
+ *   3. Stream live LLM inference tokens with async generators (`for await (const token of ...)`).
+ *   4. Broadcast compute intents to decentralized solvers.
  */
 
-import { randomBytes } from "node:crypto";
-
-// ─── Types ──────────────────────────────────────────────────────────────────
+import { KeyPair, KeyPairEd25519 } from "near-api-js";
+import { createHash } from "node:crypto";
 
 export interface DecantClientOptions {
-  /** Gateway base URL (default: http://localhost:8080) */
   gatewayUrl?: string;
-  /** Pre-existing session key. If omitted, an ephemeral key is generated. */
-  sessionKey?: string;
+  keyPair?: KeyPairEd25519;
+  sessionId?: string;
+  sessionKey?: string; // backwards compatibility
+  enableCryptoSigning?: boolean;
 }
 
-export interface ProxyResponse {
-  status: number;
-  headers: Record<string, string>;
-  body: string;
-}
-
-export interface StreamResult {
-  status: number;
-  fullText: string;
+export interface StreamResponse {
   tokens: number;
+  tokenList: string[];
+  fullText: string;
+  totalTokens: number;
+  status: number;
   quotaRemaining?: number;
 }
 
-// ─── Client class ───────────────────────────────────────────────────────────
-
 export class DecantClient {
-  readonly gatewayUrl: string;
-  readonly sessionKey: string;
+  public readonly gatewayUrl: string;
+  public readonly keyPair: KeyPairEd25519;
+  public readonly sessionId: string;
+  public readonly sessionKey: string;
+  public readonly publicKey: string;
+  private enableSigning: boolean;
 
   constructor(opts: DecantClientOptions = {}) {
     this.gatewayUrl = (opts.gatewayUrl ?? "http://localhost:8080").replace(/\/$/, "");
-    this.sessionKey = opts.sessionKey ?? DecantClient.generateSessionKey();
+    this.keyPair = opts.keyPair ?? (KeyPair.fromRandom("ed25519") as KeyPairEd25519);
+    this.publicKey = this.keyPair.getPublicKey().toString();
+    this.sessionId = opts.sessionId ?? opts.sessionKey ?? this.publicKey.replace("ed25519:", "").substring(0, 32);
+    this.sessionKey = this.sessionId;
+    this.enableSigning = opts.enableCryptoSigning ?? true;
   }
 
-  /** Generate a cryptographically random ephemeral session key. */
-  static generateSessionKey(): string {
-    return randomBytes(16).toString("hex");
+  public static generateSessionKey(): string {
+    return KeyPair.fromRandom("ed25519").getPublicKey().toString().replace("ed25519:", "").substring(0, 32);
   }
 
-  /**
-   * Send a standard request through the Decant gateway.
-   *
-   * @param path    Upstream path to hit via the proxy (e.g. "/get")
-   * @param method  HTTP method (default: GET)
-   * @param body    Optional request body (for POST/PUT)
-   */
-  async request(
+  public generateHeaders(
+    method: string,
+    path: string,
+    body: string = ""
+  ): Record<string, string> {
+    const timestamp = Date.now();
+    const headers: Record<string, string> = {
+      "X-Decant-Session": this.sessionId,
+      "X-Decant-Public-Key": this.publicKey,
+      "X-Decant-Timestamp": timestamp.toString(),
+      Accept: "application/json",
+    };
+
+    if (this.enableSigning) {
+      const bodyHash = createHash("sha256").update(body).digest("hex");
+      const digest = createHash("sha256")
+        .update(`${method.toUpperCase()}:${path}:${timestamp}:${bodyHash}`)
+        .digest();
+
+      const signature = this.keyPair.sign(digest);
+      headers["X-Decant-Signature"] = Buffer.from(signature.signature).toString("hex");
+    }
+
+    if (body) {
+      headers["Content-Type"] = "application/json";
+    }
+
+    return headers;
+  }
+
+  public async request(
     path: string = "/get",
     method: string = "GET",
     body?: string
-  ): Promise<ProxyResponse> {
+  ): Promise<{ status: number; body: string; headers: Record<string, string> }> {
     const url = `${this.gatewayUrl}${path}`;
-    const headers: Record<string, string> = {
-      "X-Decant-Session": this.sessionKey,
-      Accept: "application/json",
-    };
-    if (body !== undefined) {
-      headers["Content-Type"] = "application/json";
-      headers["Content-Length"] = Buffer.byteLength(body).toString();
-    }
+    const headers = this.generateHeaders(method, path, body ?? "");
 
     const res = await fetch(url, {
       method,
@@ -73,67 +93,60 @@ export class DecantClient {
       body: body ?? undefined,
     });
 
-    const responseBody = await res.text();
-    const responseHeaders: Record<string, string> = {};
+    const resText = await res.text();
+    const resHeaders: Record<string, string> = {};
     res.headers.forEach((v, k) => {
-      responseHeaders[k] = v;
+      resHeaders[k.toLowerCase()] = v;
     });
 
     return {
       status: res.status,
-      headers: responseHeaders,
-      body: responseBody,
+      body: resText,
+      headers: resHeaders,
     };
   }
 
   /**
-   * Convenience: send a raw prompt payload through the proxy.
+   * Helper streaming method collecting full response while invoking real-time callbacks.
    */
-  async sendPrompt(prompt: string): Promise<ProxyResponse> {
-    return this.request("/post", "POST", JSON.stringify({ prompt }));
-  }
-
-  /**
-   * Stream Llama 3 inference progressively from a Web3 DePIN compute solver.
-   *
-   * Parses live Server-Sent Events (SSE) data chunks across the wire,
-   * invokes `onToken` for each token received, and returns the assembled text.
-   */
-  async streamChat(
+  public async streamChat(
     prompt: string,
     onToken?: (token: string) => void
-  ): Promise<StreamResult> {
-    const url = `${this.gatewayUrl}/v1/chat/completions`;
+  ): Promise<StreamResponse> {
+    const path = "/v1/chat/completions";
     const payload = JSON.stringify({
       model: "meta-llama/Meta-Llama-3-8B-Instruct",
+      messages: [{ role: "user", content: prompt }],
       prompt,
       stream: true,
     });
 
-    const res = await fetch(url, {
+    const headers = this.generateHeaders("POST", path, payload);
+    headers["Accept"] = "text/event-stream";
+
+    const res = await fetch(`${this.gatewayUrl}${path}`, {
       method: "POST",
-      headers: {
-        "X-Decant-Session": this.sessionKey,
-        "Content-Type": "application/json",
-        "Accept": "text/event-stream",
-      },
+      headers,
       body: payload,
     });
+
+    const quotaHeader = res.headers.get("x-decant-quota-remaining");
+    const quotaRemaining = quotaHeader ? parseInt(quotaHeader, 10) : undefined;
 
     if (!res.ok) {
       const errText = await res.text();
       return {
-        status: res.status,
-        fullText: errText,
         tokens: 0,
+        tokenList: [],
+        fullText: errText,
+        totalTokens: 0,
+        status: res.status,
+        quotaRemaining,
       };
     }
 
-    const remainingHeader = res.headers.get("x-decant-quota-remaining");
-    const quotaRemaining = remainingHeader ? parseInt(remainingHeader, 10) : undefined;
-
+    const tokens: string[] = [];
     let fullText = "";
-    let tokenCount = 0;
 
     if (res.body) {
       const reader = res.body.getReader();
@@ -146,7 +159,7 @@ export class DecantClient {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
-        buffer = lines.pop() ?? ""; // keep incomplete tail in buffer
+        buffer = lines.pop() ?? "";
 
         for (const line of lines) {
           const trimmed = line.trim();
@@ -158,41 +171,54 @@ export class DecantClient {
             const parsed = JSON.parse(dataStr);
             const token = parsed.choices?.[0]?.delta?.content;
             if (token) {
+              tokens.push(token);
               fullText += token;
-              tokenCount += 1;
               if (onToken) onToken(token);
             }
           } catch {
-            // Ignore malformed intermediate chunks
+            // ignore
           }
         }
       }
     }
 
     return {
-      status: res.status,
+      tokens: tokens.length,
+      tokenList: tokens,
       fullText,
-      tokens: tokenCount,
+      totalTokens: tokens.length,
+      status: 200,
       quotaRemaining,
     };
   }
-}
 
-// ─── CLI demo ───────────────────────────────────────────────────────────────
+  public async broadcastIntent(model: string, maxBudget: number): Promise<any> {
+    const path = "/v1/intents/broadcast";
+    const payload = JSON.stringify({
+      sessionId: this.sessionId,
+      model,
+      maxBudget,
+    });
+    const headers = this.generateHeaders("POST", path, payload);
 
-const isMainModule = process.argv[1]?.endsWith("client.ts") || process.argv[1]?.endsWith("client.js");
-if (isMainModule) {
-  const client = new DecantClient();
-  console.log(`[agent-sdk] session key: ${client.sessionKey}`);
-  console.log(`[agent-sdk] gateway:     ${client.gatewayUrl}`);
-  console.log(`[agent-sdk] testing connection to gateway...`);
+    const res = await fetch(`${this.gatewayUrl}${path}`, {
+      method: "POST",
+      headers,
+      body: payload,
+    });
 
-  try {
-    const res = await client.request("/get");
-    console.log(`[agent-sdk] status: ${res.status}`);
-    console.log(`[agent-sdk] body:\n${res.body.slice(0, 300)}`);
-  } catch (err) {
-    console.error(`[agent-sdk] error:`, err);
-    process.exit(1);
+    return res.json();
+  }
+
+  public async getSessionInfo(): Promise<any> {
+    const path = `/v1/sessions/${this.sessionId}`;
+    const headers = this.generateHeaders("GET", path);
+
+    const res = await fetch(`${this.gatewayUrl}${path}`, {
+      method: "GET",
+      headers,
+    });
+
+    return res.json();
   }
 }

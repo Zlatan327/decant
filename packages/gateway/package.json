@@ -7,9 +7,15 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/proxy.ts",
-    "test": "tsx --test __tests__/wire.ts __tests__/depin.ts",
+    "test": "tsx --test __tests__/wire.ts __tests__/depin.ts __tests__/production.ts",
     "test:wire": "tsx --test __tests__/wire.ts",
-    "test:depin": "tsx --test __tests__/depin.ts"
+    "test:depin": "tsx --test __tests__/depin.ts",
+    "test:prod": "tsx --test __tests__/production.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^2.29.1",
+    "dotenv": "^16.4.7",
+    "near-api-js": "^5.0.1"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

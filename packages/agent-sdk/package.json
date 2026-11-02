@@ -9,7 +9,10 @@
     "demo": "tsx src/client.ts"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "near-api-js": "^7.4.0"
   }
 }
