@@ -177,4 +177,24 @@ describe("Decant Production Backend Suite", () => {
     assert.equal(res.status, 200);
     assert.ok(res.tokens > 0);
   });
+
+  // ─── Test 8: Global Sessions List ─────────────────────────────────────────
+  it("GET /v1/sessions: lists all registered sessions from persistent ledger", async () => {
+    const res = await fetch(`http://127.0.0.1:${gatewayPort}/v1/sessions`);
+    assert.equal(res.status, 200);
+    const json = await res.json() as any;
+    assert.ok(Array.isArray(json.sessions));
+    assert.ok(json.sessions.length > 0);
+    assert.equal(json.sessions[0].sessionId, testClient.sessionId);
+  });
+
+  // ─── Test 9: Global Transactions Audit ────────────────────────────────────
+  it("GET /v1/transactions: returns recent global transaction records", async () => {
+    const res = await fetch(`http://127.0.0.1:${gatewayPort}/v1/transactions`);
+    assert.equal(res.status, 200);
+    const json = await res.json() as any;
+    assert.ok(Array.isArray(json.transactions));
+    assert.ok(json.transactions.length > 0);
+    assert.equal(json.transactions[0].sessionId, testClient.sessionId);
+  });
 });

@@ -1,0 +1,4 @@
+export const MAX_TRACKED_SESSIONS = 8;
+export const MAX_SCOPED_HISTORY_SESSIONS = 8;
+export const MAX_REQUEST_BODY_BYTES = 3_600;
+export const POLL_INTERVAL_MS = 5_000;

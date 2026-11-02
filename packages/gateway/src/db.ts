@@ -179,6 +179,19 @@ export class DecantLedger {
     };
   }
 
+  public listSessions(): SessionRecord[] {
+    const rows = this.db.prepare(`SELECT * FROM sessions ORDER BY created_at DESC`).all() as any[];
+    return rows.map((row) => ({
+      sessionId: row.session_id,
+      publicKey: row.public_key,
+      ownerAccountId: row.owner_account_id,
+      totalQuota: Number(row.total_quota),
+      remainingQuota: Number(row.remaining_quota),
+      createdAt: Number(row.created_at),
+      status: row.status,
+    }));
+  }
+
   public deductQuota(
     sessionId: string,
     costUnits: number,
@@ -319,6 +332,23 @@ export class DecantLedger {
     const rows = this.db
       .prepare(`SELECT * FROM transactions WHERE session_id = ? ORDER BY timestamp DESC`)
       .all(sessionId) as any[];
+
+    return rows.map((r) => ({
+      txId: r.tx_id,
+      sessionId: r.session_id,
+      promptTokens: Number(r.prompt_tokens),
+      completionTokens: Number(r.completion_tokens),
+      costUnits: Number(r.cost_units),
+      model: r.model,
+      upstreamLatencyMs: Number(r.upstream_latency_ms),
+      timestamp: Number(r.timestamp),
+    }));
+  }
+
+  public listRecentTransactions(limit: number = 50): TransactionRecord[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ?`)
+      .all(limit) as any[];
 
     return rows.map((r) => ({
       txId: r.tx_id,

@@ -9,3 +9,4 @@ target/
 *.db-wal
 *.db-shm
 *.db-journal
+*.tsbuildinfo

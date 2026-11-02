@@ -7,11 +7,13 @@
     "packages/contracts",
     "packages/gateway",
     "packages/agent-sdk",
-    "packages/simulator"
+    "packages/simulator",
+    "packages/dashboard"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "build:contracts": "npm run build --workspace=packages/contracts",
+    "build:dashboard": "npm run build --workspace=packages/dashboard",
     "test": "npm test --workspaces --if-present",
     "test:wire": "npm test --workspace=packages/gateway",
     "test:depin": "npm run test:depin --workspace=packages/gateway",
@@ -19,6 +21,7 @@
     "test:unit:contracts": "npm run test:unit --workspace=packages/contracts",
     "test:sandbox": "npm run test:sandbox --workspace=packages/contracts",
     "dev:gateway": "npm run dev --workspace=packages/gateway",
+    "dev:dashboard": "npm run dev --workspace=packages/dashboard",
     "simulate": "npm run start --workspace=packages/simulator"
   },
   "engines": {

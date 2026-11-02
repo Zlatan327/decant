@@ -49,6 +49,7 @@ export class DecantGatewayServer {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "*",
+      "Access-Control-Expose-Headers": "*",
       ...extraHeaders,
     });
     res.end(JSON.stringify(data));
@@ -73,6 +74,7 @@ export class DecantGatewayServer {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "*",
+        "Access-Control-Expose-Headers": "*",
       });
       res.end();
       return;
@@ -147,6 +149,12 @@ export class DecantGatewayServer {
       return;
     }
 
+    if (pathname === "/v1/sessions" && method === "GET") {
+      const sessions = this.ledger.listSessions();
+      this.sendJson(res, 200, { sessions });
+      return;
+    }
+
     if (pathname.startsWith("/v1/sessions/") && method === "GET") {
       const sessionId = pathname.split("/")[3];
       const session = this.ledger.getSession(sessionId);
@@ -174,6 +182,12 @@ export class DecantGatewayServer {
       } catch (err: any) {
         this.sendJson(res, 404, { error: err.message });
       }
+      return;
+    }
+
+    if (pathname === "/v1/transactions" && method === "GET") {
+      const txs = this.ledger.listRecentTransactions(50);
+      this.sendJson(res, 200, { transactions: txs });
       return;
     }
 
@@ -286,6 +300,7 @@ export class DecantGatewayServer {
           "Cache-Control": "no-cache",
           "Connection": "keep-alive",
           "Access-Control-Allow-Origin": "*",
+          "Access-Control-Expose-Headers": "*",
           "X-Decant-Session": sessionId,
           "X-Decant-Quota-Remaining": (session?.remainingQuota ?? 100).toString(),
         });

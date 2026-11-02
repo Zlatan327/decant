@@ -10,22 +10,19 @@ A high-speed, secure network routing gateway and accounting protocol that manage
 # 1. Install dependencies
 npm install
 
-# 2. Run all integration tests across all packages (28 tests across 5 test suites)
+# 2. Run all integration tests across all packages (30 tests across 5 test suites)
 npm test
 
-# 3. Or run the gateway production test suite (SQLite ledger + Ed25519 + AI engine)
+# 3. Start the production gateway server (port 8080)
+npm run dev:gateway
+
+# 4. Start the operator dashboard (port 3000, proxies /v1 to gateway)
+npm run dev:dashboard
+
+# 5. Or run the gateway production test suite (SQLite ledger + Ed25519 + AI engine)
 npm run test:prod
 
-# 4. Or run the DePIN streaming test suite independently
-npm run test:depin
-
-# 5. Or run the NEAR Sandbox on-chain ledger test suite independently
-npm run test:sandbox
-
-# 6. Or run the gateway wire test suite independently
-npm run test:wire
-
-# 7. Run the complete end-to-end simulator user loop
+# 6. Or run the complete end-to-end simulator user loop
 npm run simulate
 ```
 
@@ -69,6 +66,11 @@ decant/
 │   ├── agent-sdk/             # Developer Toolkit for AI Agents (TypeScript)
 │   │   ├── src/client.ts      # Ed25519 signing client, intent broadcaster & SSE stream consumer
 │   │   └── src/mock-engine.ts # Deterministic local LLM response simulator (Phase 1)
+│   │
+│   ├── dashboard/             # Operator Monitoring Console (React 19 / TypeScript / Vite)
+│   │   ├── src/components/    # HealthBar, SessionPanel, StreamViewer, ActivityFeed, IntentBoard
+│   │   ├── src/domain/        # Types, reducer, formatters, and active design tokens
+│   │   └── src/api/           # REST client & incremental SSE chunk parser
 │   │
 │   └── simulator/             # Full Orchestration Environment
 │       └── main.ts            # CLI tool executing end-to-end user loops
@@ -179,7 +181,9 @@ Run `npm test`:
   ✔ Intent Lifecycle: broadcast intent and fulfill via solver (32ms)
   ✔ Circuit Breaker: halts execution with HTTP 402 once credit quota is exhausted (21ms)
   ✔ Top-up: credit replenishment restores immediate agent access (762ms)
-✔ Decant Production Backend Suite (2903ms)
+  ✔ GET /v1/sessions: lists all registered sessions from persistent ledger (5ms)
+  ✔ GET /v1/transactions: returns recent global transaction records (4ms)
+✔ Decant Production Backend Suite (2126ms)
 
 ▶ Phase 1 — Wire Transport & Session Auth
   ✔ rejects requests without X-Decant-Session with 401 (304ms)
@@ -195,7 +199,7 @@ Run `npm test`:
   ✔ rate limits are per-session — different sessions get independent buckets (94ms)
 ✔ Phase 2 — Rate Limiting & Payload Size (442ms)
 
-Total: 28 passed, 0 failed across 5 suites.
+Total: 30 passed, 0 failed across 5 suites.
 ```
 
 ---
