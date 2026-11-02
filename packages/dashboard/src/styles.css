@@ -1418,3 +1418,334 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SIDEBAR RAIL & ORGANIZED CATEGORY WORKSPACES
+   ───────────────────────────────────────────────────────────────────────── */
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #040406;
+}
+
+.sidebar-rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: 64px;
+  min-width: 64px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  background: rgba(6, 6, 8, 0.96);
+  backdrop-filter: blur(28px) saturate(180%);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  z-index: 100;
+}
+
+.sidebar-rail__top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.sidebar-rail__logo {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-rail__logo:hover {
+  transform: scale(1.08);
+}
+
+.sidebar-rail__nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+.sidebar-rail__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.sidebar-rail__item {
+  position: relative;
+}
+
+.sidebar-rail__btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.44);
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-rail__btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Active Tab Blue Badge (Matching User Reference Image) */
+.sidebar-rail__btn--active {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.42);
+  box-shadow: 0 0 24px -4px rgba(59, 130, 246, 0.5);
+}
+
+.sidebar-rail__btn--active:hover {
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.22);
+}
+
+.sidebar-rail__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-rail__active-indicator {
+  position: absolute;
+  left: -8px;
+  width: 3px;
+  height: 20px;
+  border-radius: 0 3px 3px 0;
+  background: #3b82f6;
+  box-shadow: 0 0 10px #3b82f6;
+}
+
+.sidebar-rail__tooltip {
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #0b0b10;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 7px 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-rail__tooltip strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.sidebar-rail__tooltip small {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.sidebar-rail__btn:hover .sidebar-rail__tooltip {
+  opacity: 1;
+  transform: translateY(-50%) translateX(2px);
+}
+
+.sidebar-rail__bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  width: 100%;
+}
+
+.sidebar-rail__refresh-btn {
+  width: 38px;
+  height: 38px;
+}
+
+.sidebar-rail__refresh-btn--spinning svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.sidebar-rail__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.sidebar-rail__status-dot--online {
+  background: #22c55e;
+  box-shadow: 0 0 10px #22c55e;
+}
+
+.sidebar-rail__status-dot--offline {
+  background: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+}
+
+/* Layout Content Area */
+.layout-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Category Navigation Bar */
+.category-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 18px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 20px;
+}
+
+.category-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+
+.category-tab:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.category-tab--active {
+  color: #fff;
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.38);
+  box-shadow: 0 0 18px -4px rgba(59, 130, 246, 0.35);
+}
+
+.category-tab__badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+  font-size: 0.65rem;
+}
+
+/* Dedicated Workspace Views */
+.workspace-view {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.workspace-view--single {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 22px;
+}
+
+.workspace-view--split {
+  display: grid;
+  grid-template-columns: minmax(360px, 420px) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.workspace-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: var(--border);
+  backdrop-filter: blur(24px);
+}
+
+.workspace-header__title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.workspace-header__title h2 {
+  font-size: 1.45rem;
+  color: #fff;
+  margin: 0;
+}
+
+.workspace-header__desc {
+  margin: 6px 0 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1024px) {
+  .sidebar-rail {
+    display: none;
+  }
+  .workspace-view--split {
+    grid-template-columns: 1fr;
+  }
+}
