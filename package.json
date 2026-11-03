@@ -22,6 +22,7 @@
     "test:sandbox": "npm run test:sandbox --workspace=packages/contracts",
     "dev:gateway": "npm run dev --workspace=packages/gateway",
     "dev:dashboard": "npm run dev --workspace=packages/dashboard",
+    "seed": "npm run seed --workspace=packages/gateway",
     "simulate": "npm run start --workspace=packages/simulator"
   },
   "engines": {

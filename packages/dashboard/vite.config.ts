@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 3000,
       strictPort: true,
+      allowedHosts: ['.manus.computer'],
       proxy: {
         '/v1': {
           target: gatewayTarget,

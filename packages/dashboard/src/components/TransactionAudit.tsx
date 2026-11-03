@@ -44,6 +44,7 @@ export function TransactionAudit({ transactions }: TransactionAuditProps) {
         <span className="source-badge">{scopeLabel}</span>
       </div>
       {resourceMessage && <p className={`resource-message${messageTone}`} role={transactions.status === 'error' ? 'alert' : 'status'}>{resourceMessage}</p>}
+      {rows.length > 0 && <p className="scope-note">Model is the value recorded by the gateway for the request; provider fallback is verified from the live SSE response, not inferred from this ledger field.</p>}
       {rows.length > 0 && (
         <div className="audit-controls" {...targetAttributes('transaction-audit-controls', 'panel')}>
           <label htmlFor="transaction-filter">Filter the current API snapshot</label>
@@ -73,7 +74,7 @@ export function TransactionAudit({ transactions }: TransactionAuditProps) {
                 <tr>
                   <th scope="col">Transaction</th>
                   <th scope="col">Session</th>
-                  <th scope="col">Model</th>
+                  <th scope="col">Requested model</th>
                   <th scope="col">Prompt</th>
                   <th scope="col">Completion</th>
                   <th scope="col">Cost units</th>

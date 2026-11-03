@@ -22,6 +22,7 @@ export interface SidebarNavProps {
   activeSection: DashboardSection;
   onSelectSection: (section: DashboardSection) => void;
   connected: boolean;
+  gatewayTone?: 'healthy' | 'warning' | 'offline' | 'unknown';
   onRefresh: () => void;
   isRefreshing?: boolean;
 }
@@ -30,9 +31,11 @@ export function SidebarNav({
   activeSection,
   onSelectSection,
   connected,
+  gatewayTone,
   onRefresh,
   isRefreshing,
 }: SidebarNavProps) {
+  const effectiveTone = gatewayTone ?? (connected ? 'healthy' : 'offline');
   const navItems: NavItem[] = [
     {
       id: 'overview',
@@ -182,9 +185,9 @@ export function SidebarNav({
         </button>
 
         <div
-          className={`sidebar-rail__status-dot ${connected ? 'sidebar-rail__status-dot--online' : 'sidebar-rail__status-dot--offline'}`}
-          title={connected ? 'Gateway: CONNECTED' : 'Gateway: OFFLINE'}
-          aria-label={connected ? 'Gateway online' : 'Gateway offline'}
+          className={`sidebar-rail__status-dot sidebar-rail__status-dot--${effectiveTone}`}
+          title={`Gateway: ${effectiveTone.toUpperCase()}${connected ? ' (LIVE)' : ''}`}
+          aria-label={`Gateway status: ${effectiveTone}`}
         />
       </div>
     </aside>

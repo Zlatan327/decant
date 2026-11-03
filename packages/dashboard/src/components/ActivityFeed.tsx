@@ -25,7 +25,7 @@ export function ActivityFeed({ transactions, events }: ActivityFeedProps) {
     source: 'Gateway ledger',
     level: 'success',
     title: 'Inference transaction recorded',
-    detail: `${transaction.model} · ${formatNumber(transaction.promptTokens + transaction.completionTokens)} tokens · ${formatNumber(transaction.costUnits)} credit units · ${formatNumber(transaction.upstreamLatencyMs)} ms upstream`,
+    detail: `Requested ${transaction.model} · ${formatNumber(transaction.promptTokens + transaction.completionTokens)} ledger tokens · ${formatNumber(transaction.costUnits)} credit units · ${formatNumber(transaction.upstreamLatencyMs)} ms upstream`,
     sessionId: transaction.sessionId,
     httpStatus: null,
   }));
@@ -89,7 +89,7 @@ export function ActivityFeed({ transactions, events }: ActivityFeedProps) {
           ))}
         </ol>
       )}
-      <p className="scope-note">A global feed of rejected requests requires a gateway event endpoint; only console-observed errors appear here.</p>
+      <p className="scope-note">Ledger model fields reflect the request model recorded at settlement, not necessarily the provider model that produced SSE. A global feed of rejected requests requires a gateway event endpoint; only console-observed errors appear here.</p>
     </section>
   );
 }

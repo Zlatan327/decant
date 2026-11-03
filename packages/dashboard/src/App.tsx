@@ -31,7 +31,20 @@ export function App() {
     }
   };
 
-  const connected = dashboard.state.health.data !== null;
+  const healthValue = dashboard.state.health.data?.status.toLowerCase();
+  const gatewayTone = healthValue
+    ? ['healthy', 'ok', 'operational'].includes(healthValue)
+      ? 'healthy'
+      : ['degraded', 'warning', 'partial'].includes(healthValue)
+        ? 'warning'
+        : ['offline', 'unhealthy', 'error'].includes(healthValue)
+          ? 'offline'
+          : 'unknown'
+    : dashboard.state.health.status === 'loading'
+      ? 'unknown'
+      : 'offline';
+  const hasHealthData = dashboard.state.health.data !== null;
+  const connected = hasHealthData;
   const healthLabel =
     dashboard.state.health.data?.status.toUpperCase() ??
     (dashboard.state.health.status === 'loading' ? 'CONNECTING' : 'OFFLINE');
@@ -68,6 +81,7 @@ export function App() {
         activeSection={activeSection}
         onSelectSection={setActiveSection}
         connected={connected}
+        gatewayTone={gatewayTone}
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing}
       />
@@ -95,11 +109,12 @@ export function App() {
 
             <div className="topbar__meta">
               <span
-                className={`connection-chip ${connected ? 'connection-chip--connected' : ''}`}
+                className={`connection-chip connection-chip--${gatewayTone}`}
+                data-status={gatewayTone}
                 data-render-target="gateway-connection-state"
                 data-motion-trigger="status"
               >
-                <span className="status-indicator" aria-hidden="true" />
+                <span className={`status-indicator status-indicator--${gatewayTone}`} aria-hidden="true" />
                 {healthLabel}
               </span>
               <span className="topbar__sync mono">
@@ -345,7 +360,13 @@ export function App() {
           <footer className="app-footer" {...targetAttributes('decant-observability-boundary', 'status')}>
             <span>DECANT / OPERATIONS</span>
             <span>Gateway records and this console's observed requests only</span>
-            <span className="mono">{connected ? 'SOURCE: LIVE API' : 'SOURCE: WAITING FOR API'}</span>
+            <span className="mono">
+              {hasHealthData
+                ? dashboard.state.health.status === 'stale'
+                  ? 'SOURCE: LAST KNOWN · STALE'
+                  : 'SOURCE: API RESPONDED'
+                : 'SOURCE: WAITING FOR API'}
+            </span>
           </footer>
         </div>
       </div>
