@@ -147,173 +147,133 @@ const TILES: SquircleTile[] = [
 export function CentralMinimalistHero() {
   return (
     <section className="minimalist-hero" {...targetAttributes('decant-minimalist-hero', 'panel')}>
-      {/* ── Background Airbrush Atmosphere ── */}
+      {/* ── Background Ambient Glow ── */}
       <div className="minimalist-hero__glow" aria-hidden="true" />
 
-      <div className="minimalist-hero__layout">
-        {/* ── Left Flank Editorial Metadata (Inspired by Archive Reference) ── */}
-        <aside className="minimalist-hero__editorial" aria-label="Project and track metadata">
-          <div className="editorial-index">07</div>
-          <div className="editorial-subtitle">Agent Economy &amp; Settlement</div>
-
-          <div className="editorial-meta-group">
-            <span className="editorial-meta-label">Decant <span className="dash">—</span></span>
-            <span className="editorial-meta-val">Autonomous Compute Routing</span>
-          </div>
-
-          <div className="editorial-meta-group">
-            <span className="editorial-meta-year">2026</span>
-            <span className="editorial-meta-val">NEAR Protocol Hackathon</span>
-          </div>
-
-          <div className="editorial-badges" role="list" aria-label="Verification gates">
-            <div className="editorial-badge" role="listitem">
-              <span className="editorial-badge__icon" aria-hidden="true">✓</span>
-              <div className="editorial-badge__content">
-                <span className="editorial-badge__title">34/34 Test Gates</span>
-                <span className="editorial-badge__caption">Deterministic verification</span>
-              </div>
-            </div>
-
-            <div className="editorial-badge" role="listitem">
-              <span className="editorial-badge__icon" aria-hidden="true">🛡</span>
-              <div className="editorial-badge__content">
-                <span className="editorial-badge__title">0% Gray Market</span>
-                <span className="editorial-badge__caption">Pure DePIN &amp; upstream APIs</span>
-              </div>
-            </div>
-
-            <div className="editorial-badge" role="listitem">
-              <span className="editorial-badge__icon" aria-hidden="true">⚡</span>
-              <div className="editorial-badge__content">
-                <span className="editorial-badge__title">Compute-to-USDT</span>
-                <span className="editorial-badge__caption">On-chain credit redemption</span>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* ── Central Monument: DECANT × NEAR Glowing Spray Insignia ── */}
-        <div className="minimalist-hero__center">
-          <div className="monument-emblem" aria-label="DECANT and NEAR Protocol joint architectural insignia">
-            <svg
-              className="monument-svg"
-              viewBox="0 0 540 220"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              role="img"
-              aria-label="DECANT and NEAR Protocol central glowing mark"
-            >
-              <defs>
-                {/* SVG airbrush spray texture & luminous bloom filter */}
-                <filter id="airbrush-spray" x="-40%" y="-40%" width="180%" height="180%">
-                  <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" result="noise" />
-                  <feColorMatrix type="matrix" values="0 0 0 0 0   0 0 0 0 0.92   0 0 0 0 0.59  0 0 0 0.25 0" in="noise" result="tintedNoise" />
-                  <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="softBlur" />
-                  <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="bloom1" />
-                  <feGaussianBlur in="SourceGraphic" stdDeviation="24" result="bloom2" />
-                  <feMerge>
-                    <feMergeNode in="bloom2" />
-                    <feMergeNode in="bloom1" />
-                    <feMergeNode in="tintedNoise" />
-                    <feMergeNode in="softBlur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-
-                {/* Pure NEAR green gradient */}
-                <linearGradient id="near-mint-flow" x1="0" y1="0" x2="540" y2="220" gradientUnits="userSpaceOnUse">
-                  <stop offset="0%" stopColor="#00EC97" />
-                  <stop offset="45%" stopColor="#00F5A0" />
-                  <stop offset="100%" stopColor="#00EC97" />
-                </linearGradient>
-              </defs>
-
-              {/* ── LEFT: DECANT Architectural Gateway Glyph ── */}
-              <g transform="translate(40, 20) scale(2.8)" filter="url(#airbrush-spray)">
-                {/* Outer Crystalline D Backbone */}
-                <path
-                  d="M14 10 L14 54"
-                  stroke="url(#near-mint-flow)"
-                  strokeWidth="5.5"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M14 10 L30 10 Q48 10 48 32 Q48 54 30 54 L14 54"
-                  stroke="url(#near-mint-flow)"
-                  strokeWidth="5.5"
-                  strokeLinecap="round"
-                  fill="none"
-                />
-                {/* Routing Funnel / Flow Chevron */}
-                <path
-                  d="M23 20 L35 32 L23 44"
-                  stroke="url(#near-mint-flow)"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                  opacity="0.9"
-                />
-              </g>
-
-              {/* ── CENTER: Intent Settlement Conduit ── */}
-              <g transform="translate(225, 95)" opacity="0.75" filter="url(#airbrush-spray)">
-                <circle cx="20" cy="15" r="4" fill="#00EC97" />
-                <path
-                  d="M32 15 L58 15"
-                  stroke="#00EC97"
-                  strokeWidth="2.5"
-                  strokeDasharray="4 4"
-                  strokeLinecap="round"
-                />
-                <circle cx="70" cy="15" r="4" fill="#00EC97" />
-              </g>
-
-              {/* ── RIGHT: Official NEAR Protocol Mark ── */}
-              <g transform="translate(340, 26) scale(7.2)" filter="url(#airbrush-spray)">
-                <path
-                  d="M21.443 0c-.89 0-1.714.46-2.18 1.218l-5.017 7.448a.533.533 0 0 0 .792.7l4.938-4.282a.2.2 0 0 1 .334.151v13.41a.2.2 0 0 1-.354.128L5.03.905A2.555 2.555 0 0 0 3.078 0h-.521A2.557 2.557 0 0 0 0 2.557v18.886a2.557 2.557 0 0 0 4.736 1.338l5.017-7.448a.533.533 0 0 0-.792-.7l-4.938 4.283a.2.2 0 0 1-.333-.152V5.352a.2.2 0 0 1 .354-.128l14.924 17.87c.486.574 1.2.905 1.952.906h.521A2.558 2.558 0 0 0 24 21.445V2.557A2.558 2.558 0 0 0 21.443 0Z"
-                  fill="url(#near-mint-flow)"
-                />
-              </g>
-            </svg>
-          </div>
-
-          {/* ── Hero Headings ── */}
-          <div className="minimalist-hero__copy">
-            <h1 className="minimalist-hero__headline">
-              Route AI compute across
-              <br />
-              any model, any solver
-            </h1>
-            <p className="minimalist-hero__lead">
-              Decentralized intent-settlement gateway on NEAR Protocol.
-              Verifiable Ed25519 session keys, persistent ACID credit accounting,
-              and live compute-to-USDT redemption.
-            </p>
-          </div>
-
-          {/* ── Framer-Style Squircle Model & Solver Dock ── */}
-          <div
-            className="squircle-dock"
-            role="list"
-            aria-label="Supported settlement layer, upstream model providers, and solver infrastructure"
+      {/* ── Central Monument: DECANT × NEAR Glowing Insignia ── */}
+      <div className="minimalist-hero__center">
+        <div className="monument-emblem" aria-label="DECANT and NEAR Protocol joint architectural insignia">
+          <svg
+            className="monument-svg"
+            viewBox="0 0 540 220"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            role="img"
+            aria-label="DECANT and NEAR Protocol central glowing mark"
           >
-            {TILES.map((tile) => (
-              <div
-                key={tile.id}
-                className={`squircle-tile ${tile.featured ? 'squircle-tile--featured' : ''}`}
-                role="listitem"
-                aria-label={`${tile.label} — ${tile.sublabel}`}
-                data-render-target={`squircle-tile-${tile.id}`}
-              >
-                <div className="squircle-tile__icon">{tile.icon}</div>
-                <span className="squircle-tile__label">{tile.label}</span>
-                <span className="squircle-tile__sublabel">{tile.sublabel}</span>
-              </div>
-            ))}
-          </div>
+            <defs>
+              {/* Luminous layered neon bloom without edge clipping */}
+              <filter id="neon-glow" x="-40%" y="-40%" width="180%" height="180%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur1" />
+                <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur2" />
+                <feMerge>
+                  <feMergeNode in="blur2" />
+                  <feMergeNode in="blur1" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+
+              {/* Pure NEAR green gradient */}
+              <linearGradient id="near-mint-flow" x1="0" y1="0" x2="540" y2="220" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#00EC97" />
+                <stop offset="45%" stopColor="#00F5A0" />
+                <stop offset="100%" stopColor="#00EC97" />
+              </linearGradient>
+            </defs>
+
+            {/* ── LEFT: DECANT Architectural Gateway Glyph ── */}
+            <g
+              transform="translate(40, 20) scale(2.8)"
+              style={{ filter: 'drop-shadow(0 0 14px rgba(0, 236, 151, 0.8)) drop-shadow(0 0 36px rgba(0, 236, 151, 0.4))' }}
+            >
+              {/* Outer Crystalline D Backbone */}
+              <path
+                d="M14 10 L14 54"
+                stroke="url(#near-mint-flow)"
+                strokeWidth="5.5"
+                strokeLinecap="round"
+              />
+              <path
+                d="M14 10 L30 10 Q48 10 48 32 Q48 54 30 54 L14 54"
+                stroke="url(#near-mint-flow)"
+                strokeWidth="5.5"
+                strokeLinecap="round"
+                fill="none"
+              />
+              {/* Routing Funnel / Flow Chevron */}
+              <path
+                d="M23 20 L35 32 L23 44"
+                stroke="url(#near-mint-flow)"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                opacity="0.9"
+              />
+            </g>
+
+            {/* ── CENTER: Intent Settlement Conduit ── */}
+            <g
+              transform="translate(225, 95)"
+              opacity="0.8"
+              style={{ filter: 'drop-shadow(0 0 10px rgba(0, 236, 151, 0.6))' }}
+            >
+              <circle cx="20" cy="15" r="4" fill="#00EC97" />
+              <path
+                d="M32 15 L58 15"
+                stroke="#00EC97"
+                strokeWidth="2.5"
+                strokeDasharray="4 4"
+                strokeLinecap="round"
+              />
+              <circle cx="70" cy="15" r="4" fill="#00EC97" />
+            </g>
+
+            {/* ── RIGHT: Official NEAR Protocol Mark ── */}
+            <g
+              transform="translate(340, 26) scale(7.2)"
+              style={{ filter: 'drop-shadow(0 0 16px rgba(0, 236, 151, 0.85)) drop-shadow(0 0 42px rgba(0, 236, 151, 0.45))' }}
+            >
+              <path
+                d="M21.443 0c-.89 0-1.714.46-2.18 1.218l-5.017 7.448a.533.533 0 0 0 .792.7l4.938-4.282a.2.2 0 0 1 .334.151v13.41a.2.2 0 0 1-.354.128L5.03.905A2.555 2.555 0 0 0 3.078 0h-.521A2.557 2.557 0 0 0 0 2.557v18.886a2.557 2.557 0 0 0 4.736 1.338l5.017-7.448a.533.533 0 0 0-.792-.7l-4.938 4.283a.2.2 0 0 1-.333-.152V5.352a.2.2 0 0 1 .354-.128l14.924 17.87c.486.574 1.2.905 1.952.906h.521A2.558 2.558 0 0 0 24 21.445V2.557A2.558 2.558 0 0 0 21.443 0Z"
+                fill="url(#near-mint-flow)"
+              />
+            </g>
+          </svg>
+        </div>
+
+        {/* ── Hero Headings ── */}
+        <div className="minimalist-hero__copy">
+          <h1 className="minimalist-hero__headline">
+            Route AI compute across
+            <br />
+            any model, any solver
+          </h1>
+          <p className="minimalist-hero__lead">
+            Decentralized intent-settlement gateway powered by NEAR Protocol session keys,
+            persistent ACID credit accounting, and on-chain compute-to-USDT redemption.
+          </p>
+        </div>
+
+        {/* ── Framer-Style Squircle Model & Solver Dock ── */}
+        <div
+          className="squircle-dock"
+          role="list"
+          aria-label="Supported settlement layer, upstream model providers, and solver infrastructure"
+        >
+          {TILES.map((tile) => (
+            <div
+              key={tile.id}
+              className={`squircle-tile ${tile.featured ? 'squircle-tile--featured' : ''}`}
+              role="listitem"
+              aria-label={`${tile.label} — ${tile.sublabel}`}
+              data-render-target={`squircle-tile-${tile.id}`}
+            >
+              <div className="squircle-tile__icon">{tile.icon}</div>
+              <span className="squircle-tile__label">{tile.label}</span>
+              <span className="squircle-tile__sublabel">{tile.sublabel}</span>
+            </div>
+          ))}
         </div>
       </div>
     </section>

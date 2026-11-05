@@ -9,7 +9,7 @@ import { IntentBoard } from './components/IntentBoard';
 import { SessionPanel } from './components/SessionPanel';
 import { StreamViewer } from './components/StreamViewer';
 import { TransactionAudit } from './components/TransactionAudit';
-import { SidebarNav, type DashboardSection } from './components/SidebarNav';
+import type { DashboardSection } from './components/SidebarNav';
 import { formatDateTime } from './domain/format';
 import { useDashboardData } from './hooks/useDashboardData';
 import { targetAttributes } from './components/targets';
@@ -35,6 +35,7 @@ export function App() {
   };
 
   const healthValue = dashboard.state.health.data?.status.toLowerCase();
+  const hasHealthData = dashboard.state.health.data !== null;
   const gatewayTone = healthValue
     ? ['healthy', 'ok', 'operational'].includes(healthValue)
       ? 'healthy'
@@ -46,52 +47,24 @@ export function App() {
     : dashboard.state.health.status === 'loading'
       ? 'unknown'
       : 'offline';
-  const hasHealthData = dashboard.state.health.data !== null;
-  const connected = hasHealthData;
   const healthLabel =
     dashboard.state.health.data?.status.toUpperCase() ??
     (dashboard.state.health.status === 'loading' ? 'CONNECTING' : 'OFFLINE');
 
-  const categories: { id: DashboardSection; label: string; badge?: string }[] = [
-    { id: 'overview', label: 'All overview' },
-    { id: 'value', label: 'Value / USDT redeem', badge: 'USDT' },
-    {
-      id: 'identity',
-      label: 'Identity / credit',
-      badge: dashboard.state.sessions.data?.length ? `${dashboard.state.sessions.data.length}` : undefined,
-    },
-    { id: 'request', label: 'Session-scoped request' },
-    {
-      id: 'routing',
-      label: 'Routing / settlement',
-      badge: dashboard.state.intents.data?.length ? `${dashboard.state.intents.data.length}` : undefined,
-    },
-    {
-      id: 'accounting',
-      label: 'Accounting / reconciliation',
-      badge: dashboard.state.transactions.data?.length ? `${dashboard.state.transactions.data.length}` : undefined,
-    },
-    {
-      id: 'evidence',
-      label: 'Observed evidence',
-      badge: dashboard.state.observedEvents.length ? `${dashboard.state.observedEvents.length}` : undefined,
-    },
+  const categories: { id: DashboardSection; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'value', label: 'Compute Value' },
+    { id: 'identity', label: 'Sessions & Quotas' },
+    { id: 'request', label: 'Inference Stream' },
+    { id: 'routing', label: 'Intent Marketplace' },
+    { id: 'accounting', label: 'Transactions Ledger' },
+    { id: 'evidence', label: 'Activity Feed' },
   ];
 
   return (
     <div className="app-layout" {...targetAttributes('decant-operator-console', 'none')}>
-      {/* ── Left Vertical Navigation Rail (Matches Reference Design) ── */}
-      <SidebarNav
-        activeSection={activeSection}
-        onSelectSection={setActiveSection}
-        connected={connected}
-        gatewayTone={gatewayTone}
-        onRefresh={handleRefresh}
-        isRefreshing={isRefreshing}
-      />
-
       {/* ── Main Operations Workspace ── */}
-      <div className="layout-content">
+      <div className="layout-content layout-content--full">
         <div className="app-shell">
           <header className="topbar" {...targetAttributes('decant-global-header', 'panel')}>
             <a
@@ -110,8 +83,27 @@ export function App() {
               </span>
               <span className="brand-name">DECANT</span>
               <span className="brand-divider" aria-hidden="true" />
-              <span className="brand-descriptor">GATEWAY / OPS</span>
+              <span className="brand-descriptor">GATEWAY</span>
             </a>
+
+            {/* ── Clean Unified Top Navigation ── */}
+            <nav className="topbar-nav" aria-label="Sections">
+              {categories.map((cat) => {
+                const isActive = activeSection === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`topbar-tab ${isActive ? 'topbar-tab--active' : ''}`}
+                    onClick={() => setActiveSection(cat.id)}
+                    aria-pressed={isActive}
+                    data-render-target={`category-tab-${cat.id}`}
+                  >
+                    <span>{cat.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
 
             <div className="topbar__meta">
               <span
@@ -128,44 +120,19 @@ export function App() {
                   ? 'LAST SYNC —'
                   : `SYNC ${formatDateTime(dashboard.state.lastRefreshAt)}`}
               </span>
+              <button
+                type="button"
+                className="topbar-refresh-btn mono"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                title="Refresh gateway state"
+              >
+                {isRefreshing ? 'SYNCING...' : 'REFRESH'}
+              </button>
             </div>
           </header>
 
           <main id="main-content" className="app-main" {...targetAttributes('decant-main-content', 'none')}>
-            <div className="page-intro" {...targetAttributes('operator-page-introduction', 'panel')}>
-              <div>
-                <p className="eyebrow">DECENTRALIZED INTENT SETTLEMENT GATEWAY</p>
-                <h1>Operator console</h1>
-                <p className="page-intro__copy">
-                  Live gateway state for agent sessions, compute-credit routing, request outcomes, and settlement records.
-                </p>
-              </div>
-              <div className="page-intro__context">
-                <span className="metric-label">API route</span>
-                <code title={gatewayTargetLabel()}>{gatewayTargetLabel()}</code>
-              </div>
-            </div>
-
-            {/* ── Horizontal Category Navigation Tabs ── */}
-            <nav className="category-bar" aria-label="Sections">
-              {categories.map((cat) => {
-                const isActive = activeSection === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    className={`category-tab ${isActive ? 'category-tab--active' : ''}`}
-                    onClick={() => setActiveSection(cat.id)}
-                    aria-pressed={isActive}
-                    data-render-target={`category-tab-${cat.id}`}
-                  >
-                    <span>{cat.label}</span>
-                    {cat.badge && <span className="category-tab__badge">{cat.badge}</span>}
-                  </button>
-                );
-              })}
-            </nav>
-
             {/* ── Section 1: All Overview ── */}
             {activeSection === 'overview' && (
               <div className="workspace-view" key="overview">
@@ -177,43 +144,6 @@ export function App() {
                   apiTarget={gatewayTargetLabel()}
                   onRefresh={handleRefresh}
                 />
-
-                <ValueAccrualCard />
-
-                <div className="dashboard-grid" {...targetAttributes('decant-live-dashboard-grid', 'none')}>
-                  <SessionPanel
-                    sessions={dashboard.state.sessions}
-                    sessionDetail={dashboard.state.sessionDetail}
-                    selectedSessionId={dashboard.state.selectedSessionId}
-                    trackedSessionIds={dashboard.state.trackedSessionIds}
-                    onSelect={dashboard.selectSession}
-                    onTrack={dashboard.trackSession}
-                    onUntrack={dashboard.untrackSession}
-                    onRegister={dashboard.registerSession}
-                    onTopUp={dashboard.topUpSession}
-                  />
-                  <ActivityFeed transactions={dashboard.state.transactions} events={dashboard.state.observedEvents} />
-                  <StreamViewer
-                    sessions={dashboard.state.sessions}
-                    selectedSessionId={dashboard.state.selectedSessionId}
-                    stream={dashboard.state.stream}
-                    now={now}
-                    onSelectSession={dashboard.selectSession}
-                    onRun={dashboard.runInference}
-                  />
-                </div>
-
-                <div className="audit-grid" {...targetAttributes('decant-intent-and-audit-grid', 'none')}>
-                  <IntentBoard
-                    intents={dashboard.state.intents}
-                    confirmedIntents={dashboard.state.consoleIntents}
-                    sessions={dashboard.state.sessions}
-                    selectedSessionId={dashboard.state.selectedSessionId}
-                    onBroadcast={dashboard.broadcastIntent}
-                    onFill={dashboard.fillIntent}
-                  />
-                  <TransactionAudit transactions={dashboard.state.transactions} />
-                </div>
               </div>
             )}
 
