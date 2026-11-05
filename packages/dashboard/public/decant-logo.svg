@@ -1,23 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <defs>
-    <linearGradient id="decant-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+    <linearGradient id="decant-core-grad" x1="16" y1="16" x2="112" y2="112" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#00EC97"/>
+      <stop offset="50%" stop-color="#00F5A0"/>
       <stop offset="100%" stop-color="#00C9A7"/>
     </linearGradient>
-    <filter id="decant-glow">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    <linearGradient id="decant-border-grad" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(0, 236, 151, 0.4)"/>
+      <stop offset="100%" stop-color="rgba(0, 236, 151, 0.08)"/>
+    </linearGradient>
+    <radialGradient id="decant-bg-radial" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#121718"/>
+      <stop offset="100%" stop-color="#060709"/>
+    </radialGradient>
+    <filter id="soft-neon" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#00EC97" flood-opacity="0.45"/>
     </filter>
   </defs>
-  <!-- Outer rounded square -->
-  <rect x="2" y="2" width="60" height="60" rx="14" fill="#0a0a0f" stroke="rgba(0,236,151,0.2)" stroke-width="1"/>
-  <!-- Stylised D letterform built from the DECANT funnel/filter concept -->
-  <g filter="url(#decant-glow)">
-    <!-- Left vertical stroke -->
-    <path d="M20 16 L20 48" stroke="url(#decant-grad)" stroke-width="4.5" stroke-linecap="round"/>
-    <!-- Top horizontal into curve -->
-    <path d="M20 16 L34 16 Q48 16 48 32 Q48 48 34 48 L20 48" stroke="url(#decant-grad)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-    <!-- Inner decant pour line — angled funnel motif -->
-    <path d="M28 24 L38 32 L28 40" stroke="url(#decant-grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.6"/>
+
+  <!-- Obsidian backdrop squircle -->
+  <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#decant-bg-radial)" stroke="url(#decant-border-grad)" stroke-width="1.5"/>
+
+  <!-- Geometric Crystalline D Glyph -->
+  <g filter="url(#soft-neon)">
+    <!-- Backbone spine -->
+    <path d="M42 32 L42 96" stroke="url(#decant-core-grad)" stroke-width="8.5" stroke-linecap="round"/>
+    
+    <!-- Outer flow curve -->
+    <path d="M42 32 L68 32 C92 32 98 48 98 64 C98 80 92 96 68 96 L42 96" stroke="url(#decant-core-grad)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    
+    <!-- Decant funnel chevron (angled flow motif) -->
+    <path d="M57 48 L73 64 L57 80" stroke="url(#decant-core-grad)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
   </g>
 </svg>

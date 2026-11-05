@@ -4,6 +4,7 @@ import { targetAttributes } from './targets';
 
 export type DashboardSection =
   | 'overview'
+  | 'guide'
   | 'value'
   | 'identity'
   | 'request'

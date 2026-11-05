@@ -43,22 +43,45 @@ export class DecantGatewayServer {
     return this.assignedPort || this.port;
   }
 
-  private sendJson(res: ServerResponse, status: number, data: any, extraHeaders: Record<string, string> = {}): void {
+  private getCorsHeaders(req?: IncomingMessage): Record<string, string> {
+    const origin = req?.headers.origin as string;
+    const allowed = process.env["CORS_ORIGINS"];
+    let allowOrigin = "*";
+    if (allowed && allowed !== "*") {
+      const allowedList = allowed.split(",").map((s) => s.trim());
+      allowOrigin = origin && allowedList.includes(origin) ? origin : allowedList[0] || "*";
+    }
+    return {
+      "Access-Control-Allow-Origin": allowOrigin,
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Decant-Session, X-Decant-Signature, X-Decant-Timestamp, X-Decant-Admin-Key",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Expose-Headers": "X-Decant-Session, X-Decant-Quota-Remaining",
+    };
+  }
+
+  private sendJson(res: ServerResponse, status: number, data: any, extraHeaders: Record<string, string> = {}, req?: IncomingMessage): void {
     if (res.headersSent) return;
+    const cors = this.getCorsHeaders(req);
     res.writeHead(status, {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "*",
-      "Access-Control-Expose-Headers": "*",
+      ...cors,
       ...extraHeaders,
     });
     res.end(JSON.stringify(data));
   }
 
-  private async parseBody(req: IncomingMessage): Promise<string> {
+  private async parseBody(req: IncomingMessage, maxBytes = 256 * 1024): Promise<string> {
     const chunks: Buffer[] = [];
+    let totalBytes = 0;
     for await (const chunk of req) {
-      chunks.push(chunk as Buffer);
+      const buf = chunk as Buffer;
+      totalBytes += buf.length;
+      if (totalBytes > maxBytes) {
+        const err = new Error("PAYLOAD_TOO_LARGE");
+        (err as any).statusCode = 413;
+        throw err;
+      }
+      chunks.push(buf);
     }
     return Buffer.concat(chunks).toString("utf-8");
   }
@@ -70,12 +93,7 @@ export class DecantGatewayServer {
 
     // CORS preflight
     if (method === "OPTIONS") {
-      res.writeHead(204, {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "*",
-        "Access-Control-Expose-Headers": "*",
-      });
+      res.writeHead(204, this.getCorsHeaders(req));
       res.end();
       return;
     }
@@ -130,8 +148,19 @@ export class DecantGatewayServer {
       return;
     }
 
+    const adminKey = process.env["DECANT_ADMIN_KEY"];
+    const isAuthorizedAdmin = (r: IncomingMessage): boolean => {
+      if (!adminKey) return true;
+      const key = r.headers["x-decant-admin-key"] as string;
+      return key === adminKey;
+    };
+
     // ── Session Registration & Management ───────────────────────────────────
     if (pathname === "/v1/sessions/register" && method === "POST") {
+      if (!isAuthorizedAdmin(req)) {
+        this.sendJson(res, 403, { error: "Forbidden — missing or invalid X-Decant-Admin-Key" });
+        return;
+      }
       const body = JSON.parse(await this.parseBody(req) || "{}");
       const { sessionId, publicKey, ownerAccountId, quota } = body;
 
@@ -169,6 +198,10 @@ export class DecantGatewayServer {
     }
 
     if (pathname.includes("/topup") && method === "POST") {
+      if (!isAuthorizedAdmin(req)) {
+        this.sendJson(res, 403, { error: "Forbidden — missing or invalid X-Decant-Admin-Key" });
+        return;
+      }
       const sessionId = pathname.split("/")[3];
       const body = JSON.parse(await this.parseBody(req) || "{}");
       if (!body.amount || body.amount <= 0) {
@@ -295,9 +328,15 @@ export class DecantGatewayServer {
 
       const rawBody = await this.parseBody(req);
 
-      // 3. Optional Cryptographic Ed25519 Signature Verification
-      if (this.enableCrypto) {
-        const sig = req.headers["x-decant-signature"] as string;
+      // 3. Cryptographic Ed25519 Signature Verification
+      // Always enforced if enableCrypto is configured, or whenever X-Decant-Signature is supplied
+      const sig = req.headers["x-decant-signature"] as string;
+      if (this.enableCrypto || sig) {
+        if (!sig) {
+          this.sendJson(res, 401, { error: "Unauthorized — missing required cryptographic signature header (X-Decant-Signature)" });
+          return;
+        }
+
         const ts = parseInt((req.headers["x-decant-timestamp"] as string) ?? "0", 10);
         const session = this.ledger.getSession(sessionId);
 

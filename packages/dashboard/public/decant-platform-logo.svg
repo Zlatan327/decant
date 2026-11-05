@@ -1,3 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 72" role="img" aria-label="DECANT">
-  <text x="4" y="48" font-family="monospace" font-size="38">DECANT</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 96" fill="none" role="img" aria-label="DECANT — Autonomous Compute Routing Gateway">
+  <defs>
+    <linearGradient id="wordmark-grad" x1="0" y1="0" x2="460" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00EC97"/>
+      <stop offset="60%" stop-color="#00F5A0"/>
+      <stop offset="100%" stop-color="#00C9A7"/>
+    </linearGradient>
+    <linearGradient id="wordmark-icon-border" x1="0" y1="0" x2="80" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(0, 236, 151, 0.45)"/>
+      <stop offset="100%" stop-color="rgba(0, 236, 151, 0.1)"/>
+    </linearGradient>
+    <filter id="wm-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#00EC97" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Left: Stylized emblem squircle -->
+  <g transform="translate(8, 8)">
+    <rect width="80" height="80" rx="20" fill="#0b0e11" stroke="url(#wordmark-icon-border)" stroke-width="1.5"/>
+    <g filter="url(#wm-glow)">
+      <path d="M28 20 L28 60" stroke="url(#wordmark-grad)" stroke-width="5.5" stroke-linecap="round"/>
+      <path d="M28 20 L44 20 C60 20 64 30 64 40 C64 50 60 60 44 60 L28 60" stroke="url(#wordmark-grad)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+      <path d="M38 30 L48 40 L38 50" stroke="url(#wordmark-grad)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.85"/>
+    </g>
+  </g>
+
+  <!-- Right: Wordmark DECANT & Subline -->
+  <g transform="translate(108, 0)">
+    <text x="0" y="52" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif" font-size="38" font-weight="800" letter-spacing="3.5">DECANT</text>
+    <rect x="202" y="24" width="8" height="8" rx="2" fill="url(#wordmark-grad)" filter="url(#wm-glow)"/>
+    <text x="1" y="74" fill="#00EC97" font-family="'JetBrains Mono', 'Fira Code', monospace" font-size="11.5" font-weight="600" letter-spacing="2.2" opacity="0.9">SETTLEMENT GATEWAY · NEAR</text>
+  </g>
 </svg>

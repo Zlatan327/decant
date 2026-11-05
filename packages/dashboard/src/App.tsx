@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { gatewayTargetLabel } from './api/client';
 import { ActivityFeed } from './components/ActivityFeed';
 import { DecantLogoMark } from './components/DecantLogo';
 import { CentralMinimalistHero } from './components/CentralMinimalistHero';
 import { ValueAccrualCard } from './components/ValueAccrualCard';
+import { HowItWorksView } from './components/HowItWorksView';
 import { HealthBar } from './components/HealthBar';
 import { IntentBoard } from './components/IntentBoard';
 import { SessionPanel } from './components/SessionPanel';
@@ -14,11 +15,18 @@ import { formatDateTime } from './domain/format';
 import { useDashboardData } from './hooks/useDashboardData';
 import { targetAttributes } from './components/targets';
 
+interface NavCategory {
+  id: DashboardSection;
+  label: string;
+  icon: ReactNode;
+}
+
 export function App() {
   const dashboard = useDashboardData();
   const [now, setNow] = useState(() => Date.now());
   const [activeSection, setActiveSection] = useState<DashboardSection>('overview');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -51,42 +59,230 @@ export function App() {
     dashboard.state.health.data?.status.toUpperCase() ??
     (dashboard.state.health.status === 'loading' ? 'CONNECTING' : 'OFFLINE');
 
-  const categories: { id: DashboardSection; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'value', label: 'Compute Value' },
-    { id: 'identity', label: 'Sessions & Quotas' },
-    { id: 'request', label: 'Inference Stream' },
-    { id: 'routing', label: 'Intent Marketplace' },
-    { id: 'accounting', label: 'Transactions Ledger' },
-    { id: 'evidence', label: 'Activity Feed' },
+  const categories: NavCategory[] = [
+    {
+      id: 'overview',
+      label: 'Overview',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+      ),
+    },
+    {
+      id: 'guide',
+      label: 'How It Works',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+      ),
+    },
+    {
+      id: 'value',
+      label: 'Compute Value',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 6v12M15 9.5H10a2.5 2.5 0 0 0 0 5H14a2.5 2.5 0 0 1 0 5H9" />
+        </svg>
+      ),
+    },
+    {
+      id: 'identity',
+      label: 'Sessions & Quotas',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          <circle cx="12" cy="16" r="1.5" />
+        </svg>
+      ),
+    },
+    {
+      id: 'request',
+      label: 'Inference Stream',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="4 17 10 11 4 5" />
+          <line x1="12" y1="19" x2="20" y2="19" />
+        </svg>
+      ),
+    },
+    {
+      id: 'routing',
+      label: 'Intent Marketplace',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="6" cy="6" r="3" />
+          <circle cx="18" cy="18" r="3" />
+          <circle cx="18" cy="6" r="3" />
+          <path d="M8.6 7.5L15.4 16.5" />
+          <path d="M9 6h6" />
+        </svg>
+      ),
+    },
+    {
+      id: 'accounting',
+      label: 'Transactions Ledger',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          <line x1="9" y1="7" x2="15" y2="7" />
+          <line x1="9" y1="11" x2="15" y2="11" />
+        </svg>
+      ),
+    },
+    {
+      id: 'evidence',
+      label: 'Activity Feed',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+      ),
+    },
   ];
+
+  const navDescriptions: Record<DashboardSection, string> = {
+    overview: 'Executive gateway glance & live telemetry',
+    guide: 'Architecture walkthrough & protocol guide',
+    value: 'USDT redemption & solver compute earnings',
+    identity: 'Ed25519 session keys & credit balances',
+    request: 'OpenAI-compatible SSE inference stream',
+    routing: 'Intent marketplace & solver execution',
+    accounting: 'ACID double-entry transaction ledger',
+    evidence: 'Live gateway telemetry & observed events',
+  };
 
   return (
     <div className="app-layout" {...targetAttributes('decant-operator-console', 'none')}>
+      {/* ── Left Mobile Drawer / Sidebar ── */}
+      <div
+        className={`mobile-drawer-backdrop ${isMobileNavOpen ? 'mobile-drawer-backdrop--visible' : ''}`}
+        onClick={() => setIsMobileNavOpen(false)}
+        aria-hidden={!isMobileNavOpen}
+      />
+
+      <aside
+        className={`mobile-drawer ${isMobileNavOpen ? 'mobile-drawer--open' : ''}`}
+        aria-label="Decant left mobile navigation sidebar"
+      >
+        <div className="mobile-drawer__header">
+          <div className="mobile-drawer__brand">
+            <span className="brand-mark" aria-hidden="true">
+              <DecantLogoMark size={22} />
+            </span>
+            <div className="mobile-drawer__brand-text">
+              <span className="mobile-drawer__brand-title">DECANT</span>
+              <span className="mobile-drawer__brand-subtitle">GATEWAY / OPS</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="mobile-drawer__close-btn"
+            onClick={() => setIsMobileNavOpen(false)}
+            aria-label="Close navigation sidebar"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mobile-drawer__section-label mono">OPERATOR WORKSPACES</div>
+
+        <nav className="mobile-drawer__nav">
+          {categories.map((cat) => {
+            const isActive = activeSection === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                className={`mobile-drawer__item ${isActive ? 'mobile-drawer__item--active' : ''}`}
+                onClick={() => {
+                  setActiveSection(cat.id);
+                  setIsMobileNavOpen(false);
+                }}
+              >
+                <span className="mobile-drawer__item-icon">{cat.icon}</span>
+                <div className="mobile-drawer__item-text">
+                  <span className="mobile-drawer__item-label">{cat.label}</span>
+                  <span className="mobile-drawer__item-desc">{navDescriptions[cat.id]}</span>
+                </div>
+                {isActive && <span className="mobile-drawer__active-indicator" />}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="mobile-drawer__footer">
+          <div className="mobile-drawer__health">
+            <span className={`status-indicator status-indicator--${gatewayTone}`} aria-hidden="true" />
+            <span className="mobile-drawer__health-label">NEAR GATEWAY {healthLabel}</span>
+          </div>
+          <button
+            type="button"
+            className="mobile-drawer__refresh mono"
+            onClick={() => {
+              handleRefresh();
+              setIsMobileNavOpen(false);
+            }}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? 'SYNCING...' : 'SYNC GATEWAY'}
+          </button>
+        </div>
+      </aside>
+
       {/* ── Main Operations Workspace ── */}
       <div className="layout-content layout-content--full">
         <div className="app-shell">
           <header className="topbar" {...targetAttributes('decant-global-header', 'panel')}>
-            <a
-              className="brand-lockup"
-              href="#main-content"
-              aria-label="DECANT operator console home"
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveSection('overview');
-              }}
-              data-render-target="decant-wordmark"
-              data-motion-trigger="none"
-            >
-              <span className="brand-mark" aria-hidden="true">
-                <DecantLogoMark size={20} />
-              </span>
-              <span className="brand-name">DECANT</span>
-              <span className="brand-divider" aria-hidden="true" />
-              <span className="brand-descriptor">GATEWAY</span>
-            </a>
+            <div className="topbar__left">
+              {/* Mobile Hamburger Button */}
+              <button
+                type="button"
+                className="mobile-nav-toggle"
+                onClick={() => setIsMobileNavOpen(true)}
+                aria-label="Open left navigation sidebar"
+                aria-expanded={isMobileNavOpen}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              </button>
 
-            {/* ── Clean Unified Top Navigation ── */}
+              <a
+                className="brand-lockup"
+                href="#main-content"
+                aria-label="DECANT operator console home"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveSection('overview');
+                }}
+                data-render-target="decant-wordmark"
+                data-motion-trigger="none"
+              >
+                <span className="brand-mark" aria-hidden="true">
+                  <DecantLogoMark size={20} />
+                </span>
+                <span className="brand-name">DECANT</span>
+                <span className="brand-divider" aria-hidden="true" />
+                <span className="brand-descriptor">GATEWAY</span>
+              </a>
+            </div>
+
+            {/* ── Topbar Sign & Expandable Navigation Dock (Desktop) ── */}
             <nav className="topbar-nav" aria-label="Sections">
               {categories.map((cat) => {
                 const isActive = activeSection === cat.id;
@@ -97,9 +293,15 @@ export function App() {
                     className={`topbar-tab ${isActive ? 'topbar-tab--active' : ''}`}
                     onClick={() => setActiveSection(cat.id)}
                     aria-pressed={isActive}
+                    title={cat.label}
                     data-render-target={`category-tab-${cat.id}`}
                   >
-                    <span>{cat.label}</span>
+                    <span className="topbar-tab__icon" aria-hidden="true">
+                      {cat.icon}
+                    </span>
+                    <span className={`topbar-tab__label ${isActive ? 'topbar-tab__label--active' : ''}`}>
+                      {cat.label}
+                    </span>
                   </button>
                 );
               })}
@@ -115,11 +317,13 @@ export function App() {
                 <span className={`status-indicator status-indicator--${gatewayTone}`} aria-hidden="true" />
                 {healthLabel}
               </span>
+
               <span className="topbar__sync mono">
                 {dashboard.state.lastRefreshAt === null
                   ? 'LAST SYNC —'
                   : `SYNC ${formatDateTime(dashboard.state.lastRefreshAt)}`}
               </span>
+
               <button
                 type="button"
                 className="topbar-refresh-btn mono"
@@ -133,7 +337,7 @@ export function App() {
           </header>
 
           <main id="main-content" className="app-main" {...targetAttributes('decant-main-content', 'none')}>
-            {/* ── Section 1: All Overview ── */}
+            {/* ── Section 1: Overview ── */}
             {activeSection === 'overview' && (
               <div className="workspace-view" key="overview">
                 <CentralMinimalistHero />
@@ -144,7 +348,25 @@ export function App() {
                   apiTarget={gatewayTargetLabel()}
                   onRefresh={handleRefresh}
                 />
+
+                <div className="overview-guide-prompt">
+                  <span className="overview-guide-prompt__text">
+                    New to Decant? Explore the decentralized compute routing and settlement protocol architecture
+                  </span>
+                  <button
+                    type="button"
+                    className="overview-guide-prompt__btn"
+                    onClick={() => setActiveSection('guide')}
+                  >
+                    Read How It Works &rarr;
+                  </button>
+                </div>
               </div>
+            )}
+
+            {/* ── Section 2: How It Works Guide ── */}
+            {activeSection === 'guide' && (
+              <HowItWorksView onNavigate={setActiveSection} />
             )}
 
             {/* ── Section 2: Compute-to-Value (USDT Redemption) ── */}

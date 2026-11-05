@@ -27,7 +27,7 @@ const TILES: SquircleTile[] = [
   {
     id: 'decant',
     label: 'DECANT',
-    sublabel: 'Settlement gateway',
+    sublabel: 'Gateway',
     featured: true,
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -45,8 +45,8 @@ const TILES: SquircleTile[] = [
   },
   {
     id: 'near',
-    label: 'NEAR Protocol',
-    sublabel: 'Settlement layer',
+    label: 'NEAR',
+    sublabel: 'Settlement',
     featured: true,
     icon: (
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -56,8 +56,8 @@ const TILES: SquircleTile[] = [
   },
   {
     id: 'gemini',
-    label: 'Google Gemini',
-    sublabel: 'Upstream provider',
+    label: 'Gemini',
+    sublabel: 'Upstream',
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M32 8 C32 22 22 32 8 32 C22 32 32 42 32 56 C32 42 42 32 56 32 C42 32 32 22 32 8Z" fill="url(#gem-sq-grad)" />
@@ -73,8 +73,8 @@ const TILES: SquircleTile[] = [
   },
   {
     id: 'llama',
-    label: 'Meta Llama',
-    sublabel: 'Upstream provider',
+    label: 'Llama 3',
+    sublabel: 'Open-weights',
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M22 14 C22 14 20 28 22 36 C24 44 30 48 38 48 L46 48" stroke="#A78BFA" strokeWidth="4" strokeLinecap="round" fill="none" />
@@ -86,7 +86,7 @@ const TILES: SquircleTile[] = [
   {
     id: 'openai',
     label: 'OpenAI',
-    sublabel: 'Upstream provider',
+    sublabel: 'Upstream',
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M32 12 L50 22 L50 42 L32 52 L14 42 L14 22 Z" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5" fill="none" />
@@ -97,8 +97,8 @@ const TILES: SquircleTile[] = [
   },
   {
     id: 'anthropic',
-    label: 'Anthropic Claude',
-    sublabel: 'Upstream provider',
+    label: 'Claude',
+    sublabel: 'Upstream',
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M20 46 L32 16 L44 46" stroke="#D4A574" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
@@ -108,8 +108,8 @@ const TILES: SquircleTile[] = [
   },
   {
     id: 'depin',
-    label: 'DePIN Compute',
-    sublabel: 'Solver network',
+    label: 'DePIN',
+    sublabel: 'Solver Net',
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle cx="32" cy="20" r="5" stroke="#22c55e" strokeWidth="2.5" fill="none" />
@@ -121,8 +121,8 @@ const TILES: SquircleTile[] = [
   },
   {
     id: 'sqlite',
-    label: 'SQLite Ledger',
-    sublabel: 'ACID storage',
+    label: 'SQLite',
+    sublabel: 'ACID Ledger',
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <ellipse cx="32" cy="18" rx="16" ry="6" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" fill="none" />
@@ -134,7 +134,7 @@ const TILES: SquircleTile[] = [
   {
     id: 'ed25519',
     label: 'Ed25519',
-    sublabel: 'Session keys',
+    sublabel: 'Session Keys',
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M32 10 L48 20 L48 36 C48 46 40 52 32 56 C24 52 16 46 16 36 L16 20 Z" stroke="#f59e0b" strokeWidth="2.5" fill="none" />
