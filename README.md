@@ -10,7 +10,7 @@ A high-speed, secure network routing gateway and accounting protocol that manage
 # 1. Install dependencies
 npm install
 
-# 2. Run all integration tests across all packages (30 tests across 5 test suites)
+# 2. Run all integration tests across all packages (32 tests across 5 test suites)
 npm test
 
 # 3. Start the production gateway server (port 8080)
@@ -83,10 +83,10 @@ decant/
 ## Build Phases & Hard Gates
 
 ```
-[Phase 1: Wire & Sandbox] ──▶ [Phase 2: Policy Engine] ──▶ [Phase 3: NEAR Settlement] ──▶ [Phase 4: DePIN Handshake] ──▶ [Phase 5: Production Backend]
-          │                                │                                │                           │                               │
- (Raw HTTP tunnel)                (Deterministic guards)          (On-chain RPC ledger)       (Live SSE streaming)           (SQLite, Ed25519, Multi-AI)
-     ✅ PASSED                         ✅ PASSED                         ✅ PASSED                   ✅ PASSED                       ✅ PASSED
+[Phase 1: Wire & Sandbox] ──▶ [Phase 2: Policy Engine] ──▶ [Phase 3: NEAR Settlement] ──▶ [Phase 4: DePIN Handshake] ──▶ [Phase 5: Production Backend] ──▶ [Phase 6: Compute-to-Value Loop]
+          │                                │                                │                           │                               │                              │
+ (Raw HTTP tunnel)                (Deterministic guards)          (On-chain RPC ledger)       (Live SSE streaming)           (SQLite, Ed25519, Multi-AI)     (Solver Rewards & USDT Redemption)
+     ✅ PASSED                         ✅ PASSED                         ✅ PASSED                   ✅ PASSED                       ✅ PASSED                      ✅ PASSED
 ```
 
 ### Phase 1: The Cryptographic Wire & Sandbox ✅
@@ -137,6 +137,18 @@ decant/
   - Accurate token counting and latency / TTFT telemetry.
 - **Validation Gate:** 7 integration test cases covering health status, Ed25519 anti-tampering rejection, dynamic token deduction, intent lifecycle, 402 quota circuit breaker, and top-up recovery (`packages/gateway/__tests__/production.ts`).
 
+### Phase 6: The Compute-to-Value Engine & USDT Settlement Gate ✅
+- **"Live Without Lack" Economic Model:** Converts decentralized compute contribution into spendable on-chain purchasing power, avoiding gray-market account sharing by anchoring to open models, DePIN nodes, and legitimate keys.
+- **On-Chain Solver Rewards (`packages/contracts/src/lib.rs`):**
+  - Solvers and agents fulfilling compute workloads earn transferable credit tokens directly on NEAR (`reward_solver`).
+  - View query for active solver earnings (`get_earned_credits`).
+- **Deterministic Exchange Rate:** 1,000 Compute Credits = 10 DECANT Units ≈ $1.00 USDT ($0.001 / credit).
+- **USDT Redemption Engine (`redeem_to_usdt`):**
+  - Burns earned credits on-chain with deterministic minimums (100 credits = $0.10 USDT).
+  - Emits immutable on-chain audit records (`RedemptionRecord`) logging burned tokens, timestamp, and USD-cent value.
+  - View query for verifiable cash-out history (`get_redemption`).
+- **Validation Gate:** 11 integration test cases covering active quotas, 401/402 hard gates, intent registry, solver rewards, and live credit-to-USDT redemption (`packages/contracts/tests/sandbox.ts`).
+
 ---
 
 ## Live Proof of Real Work (Test Output)
@@ -160,8 +172,10 @@ Run `npm test`:
   ✔ HARD GATE: Consume quota on-chain, verify proxy reflects decreased balance (22ms)
   ✔ HARD GATE: Exhaust on-chain quota, gateway immediately locks out agent with 402 (18ms)
   ✔ HARD GATE: Top up on-chain quota, gateway immediately re-enables access (18ms)
+  ✔ COMPUTE-TO-VALUE: Solver earns credit tokens upon fulfilling compute workload (4ms)
+  ✔ COMPUTE-TO-VALUE: Solver redeems earned compute credits for spendable USDT value (12ms)
 ✔ Phase 3 — NEAR Intent Settlement Layer & Validation Gate (281ms)
-ℹ tests 9 | suites 1 | pass 9 | fail 0
+ℹ tests 11 | suites 1 | pass 11 | fail 0
 
 > @decant/gateway@0.1.0 test
 > tsx --test __tests__/wire.ts __tests__/depin.ts __tests__/production.ts

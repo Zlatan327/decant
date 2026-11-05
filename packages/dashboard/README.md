@@ -9,14 +9,15 @@ DECANT is a React/TypeScript front end for operators and demo reviewers of the e
 - `src/domain/types.ts` and `src/domain/reducer.ts` define the live gateway records and dashboard loading, stale, error, and observed-stream state.
 - `src/hooks/useDashboardData.ts` polls health/session/intent/transaction resources independently, falls back only to explicitly tracked session details if a global list returns 404, and records only actual console request outcomes.
 - `src/components/SidebarNav.tsx` implements the dark vertical icon navigation rail, organizing the console into 5 focused operational workspaces plus an executive overview:
-  - **All Overview:** High-level system health, session gauges, active intent lanes, and live request log.
-  - **Identity / credit:** Ed25519 public keys, compute token quotas, registration, and top-up replenishment.
+  - **All Overview:** High-level system health, Framer-style ecosystem showcase (NEAR, Gemini, Llama, OpenAI, Claude, DePIN, SQLite, Ed25519), session gauges, active intent lanes, and live request log.
+  - **Identity / credit:** Ed25519 public keys, compute token quotas, registration, top-up replenishment, and solver reward/redemption accounting.
   - **Session-scoped request:** Live token-by-token SSE streaming, model selection, latency telemetry, and spending circuit breakers.
   - **Routing / settlement:** Decentralized compute intent registry, solver bidding, and settlement matching.
   - **Accounting / reconciliation:** Persistent SQLite ACID transaction audit log, token consumption, and cost units.
   - **Observed evidence:** Real-time gateway request history and directly observed HTTP 200/401/402/403 security telemetry.
+- `src/components/EcosystemShowcase.tsx` implements the Framer-style icon showcase presenting the NEAR settlement layer, supported upstream model providers, DePIN compute nodes, and cryptographic infrastructure with zero "partner" misnomers.
 - `src/components/` contains the accessible health rail, session/quota panel, observed activity feed, streaming viewer, intent lifecycle board, and transaction audit.
-- `src/styles.css` applies the supplied DECANT dark/glass tokens (`#040406` deep canvas, Clash Display, JetBrains Mono), responsive layouts, and restrained micro-motion.
+- `src/styles.css` applies the supplied DECANT dark/glass tokens (`#040406` deep canvas, Inter typography, Clash Display headers, JetBrains Mono telemetry, and `#00EC97` NEAR emerald green accents).
 
 ## Run Locally
 
