@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { gatewayTargetLabel } from './api/client';
 import { ActivityFeed } from './components/ActivityFeed';
 import { DecantLogoMark } from './components/DecantLogo';
-import { EcosystemShowcase } from './components/EcosystemShowcase';
+import { CentralMinimalistHero } from './components/CentralMinimalistHero';
+import { ValueAccrualCard } from './components/ValueAccrualCard';
 import { HealthBar } from './components/HealthBar';
 import { IntentBoard } from './components/IntentBoard';
 import { SessionPanel } from './components/SessionPanel';
@@ -53,6 +54,7 @@ export function App() {
 
   const categories: { id: DashboardSection; label: string; badge?: string }[] = [
     { id: 'overview', label: 'All overview' },
+    { id: 'value', label: 'Value / USDT redeem', badge: 'USDT' },
     {
       id: 'identity',
       label: 'Identity / credit',
@@ -167,7 +169,7 @@ export function App() {
             {/* ── Section 1: All Overview ── */}
             {activeSection === 'overview' && (
               <div className="workspace-view" key="overview">
-                <EcosystemShowcase />
+                <CentralMinimalistHero />
 
                 <HealthBar
                   resource={dashboard.state.health}
@@ -175,6 +177,8 @@ export function App() {
                   apiTarget={gatewayTargetLabel()}
                   onRefresh={handleRefresh}
                 />
+
+                <ValueAccrualCard />
 
                 <div className="dashboard-grid" {...targetAttributes('decant-live-dashboard-grid', 'none')}>
                   <SessionPanel
@@ -210,6 +214,25 @@ export function App() {
                   />
                   <TransactionAudit transactions={dashboard.state.transactions} />
                 </div>
+              </div>
+            )}
+
+            {/* ── Section 2: Compute-to-Value (USDT Redemption) ── */}
+            {activeSection === 'value' && (
+              <div className="workspace-view" key="value">
+                <div className="workspace-header">
+                  <div>
+                    <div className="workspace-header__title">
+                      <h2>Compute-to-Value Engine</h2>
+                      <span className="source-badge">NEAR ON-CHAIN SETTLEMENT</span>
+                    </div>
+                    <p className="workspace-header__desc">
+                      Convert DePIN and solver compute earnings into spendable USDT value at fixed rate (1,000 credits = $1.00 USDT).
+                    </p>
+                  </div>
+                </div>
+                <ValueAccrualCard />
+                <TransactionAudit transactions={dashboard.state.transactions} />
               </div>
             )}
 

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import url('https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap');
 
 :root {
@@ -15,9 +15,11 @@
   --surface-inset: rgba(0, 0, 0, 0.24);
   --border: 1px solid rgba(255, 255, 255, 0.04);
   --border-strong: 1px solid rgba(255, 255, 255, 0.1);
+  --border-hairline: 1px solid rgba(255, 255, 255, 0.06);
   --near-green: #00EC97;
   --near-green-dim: rgba(0, 236, 151, 0.15);
   --near-green-glow: 0 0 80px -10px rgba(0, 236, 151, 0.18);
+  --near-mint-flow: linear-gradient(135deg, #00EC97 0%, #00F5A0 50%, #00C9A7 100%);
   --blue: #3b82f6;
   --blue-glow: 0 0 80px -10px rgba(59, 130, 246, 0.15);
   --green: #22c55e;
@@ -27,9 +29,11 @@
   --text: rgba(255, 255, 255, 0.92);
   --muted: rgba(255, 255, 255, 0.56);
   --faint: rgba(255, 255, 255, 0.34);
+  --font-editorial: 'Fraunces', serif;
   --font-display: 'Clash Display', 'Arial Narrow', 'Segoe UI', sans-serif;
   --font-body: 'Inter', -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --radius: 16px;
   --radius-small: 10px;
 }
@@ -1905,6 +1909,463 @@ textarea {
     display: none;
   }
   .workspace-view--split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   KINETIC LUXE EDITORIAL MINIMALISM — HERO & MONUMENT SHOWCASE
+   Inspired by high-end design archives: editorial typography, pure black void,
+   luminous airbrush neon green spray aura, and Framer squircle docks.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.minimalist-hero {
+  position: relative;
+  padding: 44px 0 36px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.minimalist-hero__glow {
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  transform: translateX(-35%);
+  width: 680px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(0, 236, 151, 0.12) 0%, rgba(0, 236, 151, 0.03) 45%, transparent 75%);
+  pointer-events: none;
+  filter: blur(48px);
+  z-index: 0;
+}
+
+.minimalist-hero__layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 40px;
+  align-items: start;
+}
+
+/* ── Left Editorial Flank ── */
+.minimalist-hero__editorial {
+  display: flex;
+  flex-direction: column;
+  padding-top: 6px;
+}
+
+.editorial-index {
+  font-family: var(--font-editorial);
+  font-size: 5rem;
+  font-weight: 300;
+  line-height: 0.85;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: -0.04em;
+  margin-bottom: 8px;
+}
+
+.editorial-subtitle {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--near-green);
+  letter-spacing: 0.02em;
+  margin-bottom: 28px;
+}
+
+.editorial-meta-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.editorial-meta-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.editorial-meta-val {
+  font-size: 0.86rem;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.editorial-meta-year {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--near-green);
+}
+
+.editorial-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.editorial-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(14, 14, 18, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  transition: all 0.25s var(--ease-expo);
+}
+
+.editorial-badge:hover {
+  background: rgba(20, 20, 26, 0.8);
+  border-color: rgba(0, 236, 151, 0.2);
+}
+
+.editorial-badge__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background: rgba(0, 236, 151, 0.12);
+  border: 1px solid rgba(0, 236, 151, 0.25);
+  color: var(--near-green);
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.editorial-badge__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.editorial-badge__title {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.editorial-badge__caption {
+  font-size: 0.66rem;
+  color: var(--faint);
+}
+
+/* ── Central Monument Emblem ── */
+.minimalist-hero__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.monument-emblem {
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto 20px;
+  filter: drop-shadow(0 0 28px rgba(0, 236, 151, 0.42)) drop-shadow(0 0 64px rgba(0, 236, 151, 0.18));
+  transition: filter 0.4s var(--ease-expo);
+}
+
+.monument-emblem:hover {
+  filter: drop-shadow(0 0 36px rgba(0, 236, 151, 0.55)) drop-shadow(0 0 80px rgba(0, 236, 151, 0.28));
+}
+
+.monument-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.minimalist-hero__copy {
+  max-width: 620px;
+  margin: 0 auto 28px;
+}
+
+.minimalist-hero__headline {
+  font-family: var(--font-editorial);
+  font-size: clamp(2.1rem, 3.8vw, 3.2rem);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+  margin: 0 0 14px;
+}
+
+.minimalist-hero__lead {
+  font-family: var(--font-body);
+  font-size: 0.94rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.65);
+  margin: 0;
+}
+
+/* ── Framer-Style Squircle Dock ── */
+.squircle-dock {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  max-width: 740px;
+  margin: 0 auto;
+}
+
+.squircle-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 76px;
+  padding: 12px 6px 10px;
+  background: rgba(14, 14, 18, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  backdrop-filter: blur(14px);
+  transition: all 0.22s var(--ease-expo);
+}
+
+.squircle-tile:hover {
+  transform: translateY(-3px);
+  background: rgba(22, 22, 28, 0.85);
+  border-color: rgba(0, 236, 151, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 236, 151, 0.12);
+}
+
+.squircle-tile--featured {
+  background: rgba(0, 236, 151, 0.05);
+  border-color: rgba(0, 236, 151, 0.26);
+}
+
+.squircle-tile__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.squircle-tile__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.squircle-tile__label {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 68px;
+}
+
+.squircle-tile__sublabel {
+  font-family: var(--font-mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 68px;
+}
+
+.squircle-tile:hover .squircle-tile__sublabel {
+  color: var(--near-green);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   COMPUTE-TO-VALUE (USDT REDEMPTION) CARD STYLES
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.value-accrual-card {
+  margin-bottom: 24px;
+  background: rgba(12, 12, 16, 0.65);
+  border: 1px solid rgba(0, 236, 151, 0.18);
+  box-shadow: 0 0 60px -15px rgba(0, 236, 151, 0.08);
+}
+
+.rate-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--near-green);
+  background: rgba(0, 236, 151, 0.1);
+  border: 1px solid rgba(0, 236, 151, 0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+
+.value-accrual-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+}
+
+.value-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.value-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.earnings-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.stat-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+}
+
+.stat-label {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.stat-value {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.stat-value--green {
+  color: var(--near-green);
+}
+
+.stat-value--usdt {
+  color: #fff;
+}
+
+.stat-unit {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.redemption-control-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: rgba(0, 236, 151, 0.03);
+  border: 1px solid rgba(0, 236, 151, 0.12);
+  border-radius: 12px;
+}
+
+.redemption-control-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.percentage-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.pill-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.pill-btn:hover {
+  background: rgba(0, 236, 151, 0.15);
+  color: var(--near-green);
+  border-color: rgba(0, 236, 151, 0.3);
+}
+
+.redemptions-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 16px;
+}
+
+.redemptions-table-wrap {
+  overflow-x: auto;
+}
+
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.mini-table th {
+  text-align: left;
+  padding: 8px 10px;
+  color: var(--muted);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+}
+
+.mini-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.table-highlight {
+  color: var(--near-green);
+}
+
+.table-usdt {
+  color: #fff;
+  font-weight: 600;
+}
+
+.badge--settled {
+  background: rgba(0, 236, 151, 0.12);
+  color: var(--near-green);
+  border: 1px solid rgba(0, 236, 151, 0.3);
+  font-size: 0.64rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+@media (max-width: 860px) {
+  .minimalist-hero__layout {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .minimalist-hero__editorial {
+    order: 2;
+  }
+  .minimalist-hero__center {
+    order: 1;
+  }
+  .earnings-stats {
     grid-template-columns: 1fr;
   }
 }

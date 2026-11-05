@@ -219,12 +219,64 @@ export class DecantGatewayServer {
     if (pathname.includes("/fill") && method === "POST") {
       const intentId = pathname.split("/")[3];
       const body = JSON.parse(await this.parseBody(req) || "{}");
+      const solverId = body.solverId ?? "solver-default.near";
       try {
-        const intent = this.ledger.fillIntent(intentId, body.solverId ?? "solver-default.near");
+        const intent = this.ledger.fillIntent(intentId, solverId);
+        // Reward solver with compute credits for taking on the workload
+        this.ledger.recordSolverEarnings(solverId, intent.maxBudget || 50);
         this.sendJson(res, 200, intent);
       } catch (err: any) {
         this.sendJson(res, 400, { error: err.message });
       }
+      return;
+    }
+
+    // ── Solver Earnings & Compute-to-Value Redemption ───────────────────────
+    if (pathname.startsWith("/v1/solvers/") && pathname.endsWith("/earnings") && method === "GET") {
+      const solverId = pathname.split("/")[3];
+      const earned = this.ledger.getSolverEarnings(solverId);
+      this.sendJson(res, 200, {
+        solverId,
+        earnedCredits: earned,
+        usdtAmountCents: Math.floor(earned / 10),
+        usdtFormatted: (earned / 1000).toFixed(2),
+        rate: "1000 credits = $1.00 USDT",
+      });
+      return;
+    }
+
+    if (pathname.startsWith("/v1/solvers/") && pathname.endsWith("/reward") && method === "POST") {
+      const solverId = pathname.split("/")[3];
+      const body = JSON.parse(await this.parseBody(req) || "{}");
+      const amount = Number(body.amount ?? 100);
+      const newTotal = this.ledger.recordSolverEarnings(solverId, amount);
+      this.sendJson(res, 200, {
+        solverId,
+        earnedCredits: newTotal,
+        usdtFormatted: (newTotal / 1000).toFixed(2),
+      });
+      return;
+    }
+
+    if (pathname.startsWith("/v1/solvers/") && pathname.endsWith("/redeem") && method === "POST") {
+      const solverId = pathname.split("/")[3];
+      const body = JSON.parse(await this.parseBody(req) || "{}");
+      const credits = Number(body.credits ?? 0);
+      try {
+        const redemption = this.ledger.recordRedemption(solverId, credits);
+        this.sendJson(res, 200, {
+          success: true,
+          redemption,
+        });
+      } catch (err: any) {
+        this.sendJson(res, 400, { error: err.message });
+      }
+      return;
+    }
+
+    if (pathname === "/v1/redemptions" && method === "GET") {
+      const redemptions = this.ledger.listRedemptions(50);
+      this.sendJson(res, 200, { redemptions });
       return;
     }
 

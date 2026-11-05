@@ -197,4 +197,49 @@ describe("Decant Production Backend Suite", () => {
     assert.ok(json.transactions.length > 0);
     assert.equal(json.transactions[0].sessionId, testClient.sessionId);
   });
+
+  // ─── Test 10: Compute-to-Value Solver Earnings ─────────────────────────────
+  it("GET/POST /v1/solvers/:id/earnings: tracks compute workload credits", async () => {
+    const solverId = "node-alpha.near";
+    // Check initial
+    const initialRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/earnings`)).json() as any;
+    assert.equal(initialRes.earnedCredits, 0);
+
+    // Reward solver for compute execution
+    const rewardRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/reward`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: 1500 }),
+    })).json() as any;
+
+    assert.equal(rewardRes.earnedCredits, 1500);
+    assert.equal(rewardRes.usdtFormatted, "1.50");
+  });
+
+  // ─── Test 11: Compute-to-Value USDT Redemption ─────────────────────────────
+  it("POST /v1/solvers/:id/redeem: burns earned credits for spendable USDT", async () => {
+    const solverId = "node-alpha.near";
+    // Redeem 1000 credits for $1.00 USDT
+    const redeemRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/redeem`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credits: 1000 }),
+    })).json() as any;
+
+    assert.equal(redeemRes.success, true);
+    assert.ok(redeemRes.redemption.redemptionId.startsWith("rdm-"));
+    assert.equal(redeemRes.redemption.creditsBurned, 1000);
+    assert.equal(redeemRes.redemption.usdtAmountFormatted, "1.00");
+    assert.equal(redeemRes.redemption.status, "Settled");
+
+    // Verify remaining balance
+    const checkRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/earnings`)).json() as any;
+    assert.equal(checkRes.earnedCredits, 500); // 1500 - 1000
+    assert.equal(checkRes.usdtFormatted, "0.50");
+
+    // Verify redemptions list
+    const listRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/redemptions`)).json() as any;
+    assert.ok(Array.isArray(listRes.redemptions));
+    assert.ok(listRes.redemptions.some((r: any) => r.redemptionId === redeemRes.redemption.redemptionId));
+  });
 });

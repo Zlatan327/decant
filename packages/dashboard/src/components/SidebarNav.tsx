@@ -4,6 +4,7 @@ import { targetAttributes } from './targets';
 
 export type DashboardSection =
   | 'overview'
+  | 'value'
   | 'identity'
   | 'request'
   | 'routing'
@@ -49,6 +50,18 @@ export function SidebarNav({
           <rect x="14" y="3" width="7" height="7" rx="1.5" />
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
           <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+      ),
+    },
+    {
+      id: 'value',
+      label: 'Value / USDT redeem',
+      shortLabel: 'Redeem',
+      description: 'Solver compute earnings, USDT redemption, and on-chain credit burn receipts',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 6v12M15 9.5H10a2.5 2.5 0 0 0 0 5H14a2.5 2.5 0 0 1 0 5H9" />
         </svg>
       ),
     },

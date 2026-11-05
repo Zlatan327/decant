@@ -123,9 +123,25 @@ export class DecantLedger {
         is_active INTEGER NOT NULL DEFAULT 1
       );
 
+      CREATE TABLE IF NOT EXISTS solver_earnings (
+        solver_id TEXT PRIMARY KEY,
+        earned_credits INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS redemptions (
+        redemption_id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        credits_burned INTEGER NOT NULL,
+        usdt_amount_cents INTEGER NOT NULL,
+        timestamp INTEGER NOT NULL,
+        status TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
       CREATE INDEX IF NOT EXISTS idx_intents_status ON intents(status);
       CREATE INDEX IF NOT EXISTS idx_tx_session ON transactions(session_id);
+      CREATE INDEX IF NOT EXISTS idx_redemptions_account ON redemptions(account_id);
     `);
   }
 
@@ -323,6 +339,97 @@ export class DecantLedger {
       solverId: r.solver_id,
       createdAt: Number(r.created_at),
       filledAt: r.filled_at ? Number(r.filled_at) : null,
+    }));
+  }
+
+  // ─── Solver Earnings & Compute-to-Value Redemption ───────────────────────
+
+  public recordSolverEarnings(solverId: string, amount: number): number {
+    const current = this.getSolverEarnings(solverId);
+    const newTotal = current + amount;
+    const now = Date.now();
+
+    this.db.prepare(`
+      INSERT INTO solver_earnings (solver_id, earned_credits, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(solver_id) DO UPDATE SET earned_credits = ?, updated_at = ?
+    `).run(solverId, newTotal, now, newTotal, now);
+
+    return newTotal;
+  }
+
+  public getSolverEarnings(solverId: string): number {
+    const row = this.db.prepare(`SELECT earned_credits FROM solver_earnings WHERE solver_id = ?`).get(solverId) as any;
+    return row ? Number(row.earned_credits) : 0;
+  }
+
+  public recordRedemption(accountId: string, credits: number): {
+    redemptionId: string;
+    accountId: string;
+    creditsBurned: number;
+    usdtAmountCents: number;
+    usdtAmountFormatted: string;
+    timestamp: number;
+    status: string;
+  } {
+    if (credits < 100) {
+      throw new Error("Minimum redemption is 100 credits ($0.10 USDT)");
+    }
+
+    const currentEarnings = this.getSolverEarnings(accountId);
+    if (currentEarnings < credits) {
+      throw new Error(`Insufficient earned credits: available ${currentEarnings}, requested ${credits}`);
+    }
+
+    const newBalance = currentEarnings - credits;
+    const now = Date.now();
+    const redemptionId = `rdm-${now}-${Math.random().toString(36).substring(2, 7)}`;
+    const usdtAmountCents = Math.floor(credits / 10); // 1,000 credits = $1.00 USDT = 100 cents
+
+    this.db.exec("BEGIN IMMEDIATE TRANSACTION;");
+    try {
+      this.db.prepare(`
+        UPDATE solver_earnings SET earned_credits = ?, updated_at = ? WHERE solver_id = ?
+      `).run(newBalance, now, accountId);
+
+      this.db.prepare(`
+        INSERT INTO redemptions (redemption_id, account_id, credits_burned, usdt_amount_cents, timestamp, status)
+        VALUES (?, ?, ?, ?, ?, 'Settled')
+      `).run(redemptionId, accountId, credits, usdtAmountCents, now);
+
+      this.db.exec("COMMIT;");
+    } catch (err) {
+      this.db.exec("ROLLBACK;");
+      throw err;
+    }
+
+    return {
+      redemptionId,
+      accountId,
+      creditsBurned: credits,
+      usdtAmountCents,
+      usdtAmountFormatted: (usdtAmountCents / 100).toFixed(2),
+      timestamp: now,
+      status: "Settled",
+    };
+  }
+
+  public listRedemptions(limit: number = 20): any[] {
+    const rows = this.db.prepare(`
+      SELECT redemption_id, account_id, credits_burned, usdt_amount_cents, timestamp, status
+      FROM redemptions
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `).all(limit) as any[];
+
+    return rows.map((r) => ({
+      redemptionId: r.redemption_id,
+      accountId: r.account_id,
+      creditsBurned: Number(r.credits_burned),
+      usdtAmountCents: Number(r.usdt_amount_cents),
+      usdtAmountFormatted: (Number(r.usdt_amount_cents) / 100).toFixed(2),
+      timestamp: Number(r.timestamp),
+      status: r.status,
     }));
   }
 
