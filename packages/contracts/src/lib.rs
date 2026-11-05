@@ -10,7 +10,7 @@
  */
 
 use near_sdk::store::LookupMap;
-use near_sdk::{env, near, AccountId, BorshStorageKey, NearToken, PanicOnDefault};
+use near_sdk::{env, near, AccountId, BorshStorageKey, PanicOnDefault};
 
 // ─── Storage Keys ───────────────────────────────────────────────────────────
 
@@ -19,6 +19,8 @@ use near_sdk::{env, near, AccountId, BorshStorageKey, NearToken, PanicOnDefault}
 enum StorageKey {
     Quotas,
     Intents,
+    EarnedCredits,
+    Redemptions,
 }
 
 // ─── Data Structures ────────────────────────────────────────────────────────
@@ -33,6 +35,19 @@ pub struct Quota {
     pub total: u64,
     /// Remaining compute tokens available for use.
     pub remaining: u64,
+}
+
+/// A settlement redemption record converting earned compute credits into spendable USDT value.
+#[near(serializers = [json, borsh])]
+#[derive(Clone)]
+pub struct RedemptionRecord {
+    pub redemption_id: String,
+    pub account_id: AccountId,
+    pub credits_burned: u64,
+    /// USDT amount denominated in cents (e.g. 1,000 credits = $1.00 USDT = 100 cents).
+    pub usdt_amount_cents: u64,
+    pub timestamp: u64,
+    pub status: String,
 }
 
 /// The status of an intent in the registry.
@@ -77,6 +92,12 @@ pub struct DecantContract {
     open_intent_ids: Vec<String>,
     /// Contract owner (admin).
     owner: AccountId,
+    /// Solver / User AccountId → Earned compute credit tokens.
+    earned_credits: LookupMap<AccountId, u64>,
+    /// Total redemptions counter.
+    redemption_counter: u64,
+    /// Redemption ID → RedemptionRecord.
+    redemptions: LookupMap<String, RedemptionRecord>,
 }
 
 // ─── Contract Implementation ────────────────────────────────────────────────
@@ -92,6 +113,9 @@ impl DecantContract {
             intent_counter: 0,
             open_intent_ids: Vec::new(),
             owner,
+            earned_credits: LookupMap::new(StorageKey::EarnedCredits),
+            redemption_counter: 0,
+            redemptions: LookupMap::new(StorageKey::Redemptions),
         }
     }
 
@@ -250,6 +274,77 @@ impl DecantContract {
             .iter()
             .filter_map(|id| self.intents.get(id).cloned())
             .collect()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Compute-to-Value & Redemption Engine
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Reward a compute solver or agent with earned credits for fulfilling compute work.
+    pub fn reward_solver(&mut self, solver_id: AccountId, amount: u64) -> u64 {
+        let current = self.earned_credits.get(&solver_id).copied().unwrap_or(0);
+        let new_total = current + amount;
+        self.earned_credits.insert(solver_id.clone(), new_total);
+        env::log_str(&format!(
+            "Solver '{}' rewarded {} credits. New balance: {}",
+            solver_id, amount, new_total
+        ));
+        new_total
+    }
+
+    /// View method: get a solver or user's earned credit balance.
+    pub fn get_earned_credits(&self, account_id: AccountId) -> u64 {
+        self.earned_credits.get(&account_id).copied().unwrap_or(0)
+    }
+
+    /// Convert earned compute credits into spendable USDT value at fixed rate
+    /// (1,000 credits = $1.00 USDT = 100 cents).
+    /// Burns the credits on-chain and logs the settlement event for liquidity transfer.
+    pub fn redeem_to_usdt(&mut self, account_id: AccountId, credits: u64) -> RedemptionRecord {
+        assert!(credits >= 100, "Minimum redemption is 100 credits ($0.10 USDT)");
+        let current = self.earned_credits.get(&account_id).copied().unwrap_or(0);
+        assert!(
+            current >= credits,
+            "Insufficient earned credits to redeem: {} available, {} requested",
+            current,
+            credits
+        );
+
+        let new_balance = current - credits;
+        self.earned_credits.insert(account_id.clone(), new_balance);
+
+        self.redemption_counter += 1;
+        let redemption_id = format!("rdm-{}", self.redemption_counter);
+        let usdt_amount_cents = credits / 10;
+
+        let record = RedemptionRecord {
+            redemption_id: redemption_id.clone(),
+            account_id: account_id.clone(),
+            credits_burned: credits,
+            usdt_amount_cents,
+            timestamp: env::block_timestamp(),
+            status: "Settled".to_string(),
+        };
+
+        self.redemptions.insert(redemption_id.clone(), record.clone());
+        env::log_str(&format!(
+            "Redemption '{}': Account '{}' burned {} credits for ${:.2} USDT. Remaining: {}",
+            redemption_id,
+            account_id,
+            credits,
+            (usdt_amount_cents as f64) / 100.0,
+            new_balance
+        ));
+
+        record
+    }
+
+    /// View method: retrieve a redemption audit record.
+    pub fn get_redemption(&self, redemption_id: String) -> RedemptionRecord {
+        self.redemptions
+            .get(&redemption_id)
+            .expect("Redemption record not found")
+            .clone()
     }
 }
 

@@ -39,6 +39,15 @@ export interface IntentRecord {
   created_at: number;
 }
 
+export interface RedemptionRecord {
+  redemption_id: string;
+  account_id: string;
+  credits_burned: number;
+  usdt_amount_cents: number;
+  timestamp: number;
+  status: string;
+}
+
 // ─── RPC Client ─────────────────────────────────────────────────────────────
 
 export class NearRpcClient {
@@ -133,6 +142,28 @@ export class NearRpcClient {
    */
   async listOpenIntents(): Promise<IntentRecord[]> {
     return this.viewMethod<IntentRecord[]>("list_open_intents", {});
+  }
+
+  /**
+   * Get earned compute credit balance for an account (solver or agent).
+   */
+  async getEarnedCredits(accountId: string): Promise<number> {
+    try {
+      return await this.viewMethod<number>("get_earned_credits", { account_id: accountId });
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Get audit record of a compute credit redemption.
+   */
+  async getRedemption(redemptionId: string): Promise<RedemptionRecord | null> {
+    try {
+      return await this.viewMethod<RedemptionRecord>("get_redemption", { redemption_id: redemptionId });
+    } catch {
+      return null;
+    }
   }
 
   /**

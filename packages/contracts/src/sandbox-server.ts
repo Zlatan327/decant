@@ -29,6 +29,15 @@ export interface IntentEntry {
   created_at: number;
 }
 
+export interface RedemptionEntry {
+  redemption_id: string;
+  account_id: string;
+  credits_burned: number;
+  usdt_amount_cents: number;
+  timestamp: number;
+  status: string;
+}
+
 export class NearSandboxServer {
   private server: Server | null = null;
   private port: number = 0;
@@ -36,7 +45,10 @@ export class NearSandboxServer {
   // On-chain state matching packages/contracts/src/lib.rs
   public quotas = new Map<string, QuotaEntry>();
   public intents = new Map<string, IntentEntry>();
+  public earnedCredits = new Map<string, number>();
+  public redemptions = new Map<string, RedemptionEntry>();
   public intentCounter = 0;
+  public redemptionCounter = 0;
   public contractOwner: string = "owner.test.near";
 
   constructor(public readonly contractId: string = "decant.test.near") {}
@@ -131,6 +143,51 @@ export class NearSandboxServer {
     return Array.from(this.intents.values()).filter((i) => i.status === "Open");
   }
 
+  // ─── Compute-to-Value & Redemption Engine ─────────────────────────────────
+
+  public rewardSolver(solverId: string, amount: number): number {
+    const current = this.earnedCredits.get(solverId) ?? 0;
+    const newTotal = current + amount;
+    this.earnedCredits.set(solverId, newTotal);
+    return newTotal;
+  }
+
+  public getEarnedCredits(accountId: string): number {
+    return this.earnedCredits.get(accountId) ?? 0;
+  }
+
+  public redeemToUsdt(accountId: string, credits: number): RedemptionEntry {
+    if (credits < 100) {
+      throw new Error("Minimum redemption is 100 credits ($0.10 USDT)");
+    }
+    const current = this.earnedCredits.get(accountId) ?? 0;
+    if (current < credits) {
+      throw new Error(`Insufficient earned credits to redeem: ${current} available, ${credits} requested`);
+    }
+    this.earnedCredits.set(accountId, current - credits);
+    this.redemptionCounter += 1;
+    const redemptionId = `rdm-${this.redemptionCounter}`;
+    const usdtAmountCents = Math.floor(credits / 10);
+    const entry: RedemptionEntry = {
+      redemption_id: redemptionId,
+      account_id: accountId,
+      credits_burned: credits,
+      usdt_amount_cents: usdtAmountCents,
+      timestamp: Date.now() * 1_000_000,
+      status: "Settled",
+    };
+    this.redemptions.set(redemptionId, entry);
+    return entry;
+  }
+
+  public getRedemption(redemptionId: string): RedemptionEntry {
+    const entry = this.redemptions.get(redemptionId);
+    if (!entry) {
+      throw new Error("Redemption record not found");
+    }
+    return entry;
+  }
+
   // ─── JSON-RPC 2.0 Dispatcher ──────────────────────────────────────────────
 
   private handleRpc(body: any): any {
@@ -162,6 +219,10 @@ export class NearSandboxServer {
             callResult = this.getIntent(args.intent_id);
           } else if (method_name === "list_open_intents") {
             callResult = this.listOpenIntents();
+          } else if (method_name === "get_earned_credits") {
+            callResult = this.getEarnedCredits(args.account_id);
+          } else if (method_name === "get_redemption") {
+            callResult = this.getRedemption(args.redemption_id);
           } else {
             throw new Error(`Unknown contract view method: ${method_name}`);
           }
@@ -204,6 +265,10 @@ export class NearSandboxServer {
           txResult = this.broadcastIntent(args.session_id, args.payload);
         } else if (method_name === "fill_intent") {
           txResult = this.fillIntent(args.intent_id, args.solver_id);
+        } else if (method_name === "reward_solver") {
+          txResult = this.rewardSolver(args.solver_id, args.amount);
+        } else if (method_name === "redeem_to_usdt") {
+          txResult = this.redeemToUsdt(args.account_id, args.credits);
         } else {
           throw new Error(`Unknown transaction method: ${method_name}`);
         }

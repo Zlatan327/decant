@@ -230,4 +230,34 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
     assert.equal(res.headers.get("x-decant-quota-remaining"), "50");
     assert.equal(res.headers.get("x-decant-quota-total"), "150");
   });
+
+  it("COMPUTE-TO-VALUE: Solver earns credit tokens upon fulfilling compute workload", async () => {
+    const solverAccount = "solver-llama3.test.near";
+
+    // Solver serves inference and is rewarded 500 compute credits
+    sandboxServer.rewardSolver(solverAccount, 500);
+
+    const balance = await nearRpc.getEarnedCredits(solverAccount);
+    assert.equal(balance, 500, "Solver balance must reflect earned compute tokens");
+  });
+
+  it("COMPUTE-TO-VALUE: Solver redeems earned compute credits for spendable USDT value", async () => {
+    const solverAccount = "solver-llama3.test.near";
+
+    // Redeem 500 earned credits for USDT (1,000 credits = $1.00 USDT -> 500 credits = $0.50 USDT = 50 cents)
+    const redemption = sandboxServer.redeemToUsdt(solverAccount, 500);
+
+    assert.equal(redemption.credits_burned, 500);
+    assert.equal(redemption.usdt_amount_cents, 50);
+    assert.equal(redemption.status, "Settled");
+
+    // Remaining on-chain balance must now be 0
+    const remainingBalance = await nearRpc.getEarnedCredits(solverAccount);
+    assert.equal(remainingBalance, 0);
+
+    // View method queries the settled redemption record
+    const record = await nearRpc.getRedemption(redemption.redemption_id);
+    assert.ok(record !== null);
+    assert.equal(record.usdt_amount_cents, 50);
+  });
 });
