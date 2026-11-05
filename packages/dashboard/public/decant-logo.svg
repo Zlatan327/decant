@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="decant-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00EC97"/>
+      <stop offset="100%" stop-color="#00C9A7"/>
+    </linearGradient>
+    <filter id="decant-glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  <!-- Outer rounded square -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#0a0a0f" stroke="rgba(0,236,151,0.2)" stroke-width="1"/>
+  <!-- Stylised D letterform built from the DECANT funnel/filter concept -->
+  <g filter="url(#decant-glow)">
+    <!-- Left vertical stroke -->
+    <path d="M20 16 L20 48" stroke="url(#decant-grad)" stroke-width="4.5" stroke-linecap="round"/>
+    <!-- Top horizontal into curve -->
+    <path d="M20 16 L34 16 Q48 16 48 32 Q48 48 34 48 L20 48" stroke="url(#decant-grad)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+    <!-- Inner decant pour line — angled funnel motif -->
+    <path d="M28 24 L38 32 L28 40" stroke="url(#decant-grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.6"/>
+  </g>
+</svg>

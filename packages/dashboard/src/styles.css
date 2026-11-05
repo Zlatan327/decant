@@ -1,11 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import url('https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap');
 
 :root {
   color-scheme: dark;
-  font-family: Inter, 'Segoe UI', Arial, sans-serif;
+  font-family: 'Inter', -apple-system, 'Segoe UI', Arial, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   background: #040406;
   color: rgba(255, 255, 255, 0.92);
   --surface: rgba(12, 12, 16, 0.5);
@@ -13,6 +15,9 @@
   --surface-inset: rgba(0, 0, 0, 0.24);
   --border: 1px solid rgba(255, 255, 255, 0.04);
   --border-strong: 1px solid rgba(255, 255, 255, 0.1);
+  --near-green: #00EC97;
+  --near-green-dim: rgba(0, 236, 151, 0.15);
+  --near-green-glow: 0 0 80px -10px rgba(0, 236, 151, 0.18);
   --blue: #3b82f6;
   --blue-glow: 0 0 80px -10px rgba(59, 130, 246, 0.15);
   --green: #22c55e;
@@ -23,6 +28,7 @@
   --muted: rgba(255, 255, 255, 0.56);
   --faint: rgba(255, 255, 255, 0.34);
   --font-display: 'Clash Display', 'Arial Narrow', 'Segoe UI', sans-serif;
+  --font-body: 'Inter', -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
   --radius: 16px;
   --radius-small: 10px;
@@ -139,22 +145,29 @@ h3 {
 
 .brand-mark {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  border: 1px solid rgba(59, 130, 246, 0.48);
+  border: 1px solid rgba(0, 236, 151, 0.4);
   border-radius: 9px;
-  color: #fff;
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 600;
-  box-shadow: 0 0 26px -12px rgba(59, 130, 246, 0.8);
+  background: rgba(0, 236, 151, 0.06);
+  overflow: hidden;
+  box-shadow: 0 0 26px -12px rgba(0, 236, 151, 0.7);
+}
+
+.brand-mark svg {
+  width: 20px;
+  height: 20px;
 }
 
 .brand-name {
   font-size: 1.18rem;
   font-weight: 600;
   letter-spacing: 0.08em;
+  background: linear-gradient(135deg, #00EC97 0%, #00C9A7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .brand-divider {
@@ -263,7 +276,7 @@ h3 {
 
 .eyebrow {
   margin-bottom: 8px;
-  color: var(--blue);
+  color: var(--near-green);
   font-size: 0.64rem;
 }
 
@@ -1430,6 +1443,132 @@ textarea {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   ECOSYSTEM SHOWCASE — Framer-style icon grid
+   ───────────────────────────────────────────────────────────────────────── */
+
+.ecosystem-showcase {
+  padding: 28px 0 8px;
+  text-align: center;
+}
+
+.ecosystem-showcase__header {
+  max-width: 600px;
+  margin: 0 auto 32px;
+}
+
+.ecosystem-showcase__eyebrow {
+  margin-bottom: 12px;
+  color: var(--near-green);
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ecosystem-showcase__title {
+  margin: 0 0 14px;
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.ecosystem-showcase__desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.ecosystem-showcase__grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.ecosystem-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 76px;
+  padding: 14px 8px 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: default;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ecosystem-tile:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+}
+
+.ecosystem-tile--featured {
+  background: rgba(0, 236, 151, 0.04);
+  border-color: rgba(0, 236, 151, 0.12);
+}
+
+.ecosystem-tile--featured:hover {
+  background: rgba(0, 236, 151, 0.08);
+  border-color: rgba(0, 236, 151, 0.25);
+  box-shadow: 0 12px 28px rgba(0, 236, 151, 0.1);
+}
+
+.ecosystem-tile__icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ecosystem-tile__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ecosystem-tile__label {
+  font-family: var(--font-body);
+  font-size: 0.58rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ecosystem-tile__sublabel {
+  font-family: var(--font-mono);
+  font-size: 0.48rem;
+  font-weight: 400;
+  color: var(--faint);
+  text-align: center;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  margin-top: -4px;
+}
+
+@media (max-width: 600px) {
+  .ecosystem-showcase__grid {
+    gap: 10px;
+  }
+  .ecosystem-tile {
+    width: 68px;
+    padding: 10px 6px 8px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    SIDEBAR RAIL & ORGANIZED CATEGORY WORKSPACES
    ───────────────────────────────────────────────────────────────────────── */
 
@@ -1522,17 +1661,17 @@ textarea {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
-/* Active Tab Blue Badge (Matching User Reference Image) */
+/* Active Tab Badge (Matching NEAR / DECANT Theme) */
 .sidebar-rail__btn--active {
-  color: #3b82f6;
-  background: rgba(59, 130, 246, 0.16);
-  border-color: rgba(59, 130, 246, 0.42);
-  box-shadow: 0 0 24px -4px rgba(59, 130, 246, 0.5);
+  color: var(--near-green);
+  background: rgba(0, 236, 151, 0.12);
+  border-color: rgba(0, 236, 151, 0.35);
+  box-shadow: 0 0 24px -4px rgba(0, 236, 151, 0.45);
 }
 
 .sidebar-rail__btn--active:hover {
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.22);
+  color: #55f3ba;
+  background: rgba(0, 236, 151, 0.18);
 }
 
 .sidebar-rail__icon {
@@ -1547,8 +1686,8 @@ textarea {
   width: 3px;
   height: 20px;
   border-radius: 0 3px 3px 0;
-  background: #3b82f6;
-  box-shadow: 0 0 10px #3b82f6;
+  background: var(--near-green);
+  box-shadow: 0 0 10px var(--near-green);
 }
 
 .sidebar-rail__tooltip {
@@ -1686,16 +1825,16 @@ textarea {
 
 .category-tab--active {
   color: #fff;
-  background: rgba(59, 130, 246, 0.14);
-  border-color: rgba(59, 130, 246, 0.38);
-  box-shadow: 0 0 18px -4px rgba(59, 130, 246, 0.35);
+  background: rgba(0, 236, 151, 0.12);
+  border-color: rgba(0, 236, 151, 0.35);
+  box-shadow: 0 0 18px -4px rgba(0, 236, 151, 0.3);
 }
 
 .category-tab__badge {
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(59, 130, 246, 0.25);
-  color: #93c5fd;
+  background: rgba(0, 236, 151, 0.22);
+  color: #55f3ba;
   font-size: 0.65rem;
 }
 

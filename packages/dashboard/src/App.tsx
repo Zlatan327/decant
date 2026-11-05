@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { gatewayTargetLabel } from './api/client';
 import { ActivityFeed } from './components/ActivityFeed';
+import { DecantLogoMark } from './components/DecantLogo';
+import { EcosystemShowcase } from './components/EcosystemShowcase';
 import { HealthBar } from './components/HealthBar';
 import { IntentBoard } from './components/IntentBoard';
 import { SessionPanel } from './components/SessionPanel';
@@ -101,7 +103,9 @@ export function App() {
               data-render-target="decant-wordmark"
               data-motion-trigger="none"
             >
-              <span className="brand-mark" aria-hidden="true">D</span>
+              <span className="brand-mark" aria-hidden="true">
+                <DecantLogoMark size={20} />
+              </span>
               <span className="brand-name">DECANT</span>
               <span className="brand-divider" aria-hidden="true" />
               <span className="brand-descriptor">GATEWAY / OPS</span>
@@ -163,6 +167,8 @@ export function App() {
             {/* ── Section 1: All Overview ── */}
             {activeSection === 'overview' && (
               <div className="workspace-view" key="overview">
+                <EcosystemShowcase />
+
                 <HealthBar
                   resource={dashboard.state.health}
                   now={now}

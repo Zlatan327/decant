@@ -1,4 +1,5 @@
 import React from 'react';
+import { DecantLogoMark } from './DecantLogo';
 import { targetAttributes } from './targets';
 
 export type DashboardSection =
@@ -131,7 +132,9 @@ export function SidebarNav({
           title="DECANT Operator Console"
           aria-label="DECANT Home"
         >
-          <span className="brand-mark" aria-hidden="true">D</span>
+          <span className="brand-mark" aria-hidden="true">
+            <DecantLogoMark size={20} />
+          </span>
         </button>
       </div>
 
