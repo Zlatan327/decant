@@ -32,10 +32,10 @@ export class DecantComputeEngine {
 
   constructor() {
     this.geminiClient = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
-    this.geminiModel = process.env.GEMINI_MODEL;
-    this.upstreamBaseUrl = (process.env.UPSTREAM_BASE_URL ?? process.env.DEPIN_BASE_URL)?.replace(/\/$/, "");
-    this.upstreamApiKey = process.env.UPSTREAM_API_KEY ?? process.env.GROQ_API_KEY ?? process.env.OPENAI_API_KEY ?? process.env.HYPERBOLIC_API_KEY;
-    this.defaultModel = process.env.DECANT_MODEL ?? process.env.UPSTREAM_MODEL ?? this.geminiModel ?? "";
+    this.geminiModel = process.env.GEMINI_MODEL?.trim() || undefined;
+    this.upstreamBaseUrl = (process.env.UPSTREAM_BASE_URL || process.env.DEPIN_BASE_URL)?.trim().replace(/\/$/, "") || undefined;
+    this.upstreamApiKey = (process.env.UPSTREAM_API_KEY || process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.HYPERBOLIC_API_KEY)?.trim() || undefined;
+    this.defaultModel = (process.env.DECANT_MODEL || process.env.UPSTREAM_MODEL || this.geminiModel || "").trim();
   }
 
   public estimateTokens(text: string): number { return Math.ceil(text.length / 4); }

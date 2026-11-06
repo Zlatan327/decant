@@ -1,5 +1,14 @@
 /** Explicit local harness: isolated test credits, real configured provider, no chain settlement. */
-import "dotenv/config";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import dotenv from "dotenv";
+
+const rootEnv = resolve(import.meta.dirname, "../../.env");
+if (existsSync(rootEnv)) {
+  dotenv.config({ path: rootEnv });
+} else {
+  dotenv.config();
+}
 import { DecantGatewayServer } from "../gateway/src/server.js";
 import { DecantClient } from "../agent-sdk/src/client.js";
 
