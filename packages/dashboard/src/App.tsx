@@ -28,6 +28,28 @@ export function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | undefined>(undefined);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const queryTheme = params.get('theme');
+      if (queryTheme === 'dark' || queryTheme === 'light') return queryTheme;
+      const saved = localStorage.getItem('decant-theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 'light';
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem('decant-theme', theme);
+    } catch {}
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -225,6 +247,17 @@ export function App() {
         </nav>
 
         <div className="mobile-drawer__footer">
+          <div className="mobile-drawer__theme-row">
+            <span className="mono" style={{ fontSize: '0.64rem', color: 'var(--muted)' }}>THEME</span>
+            <button
+              type="button"
+              className="theme-toggle-btn theme-toggle-btn--mobile"
+              onClick={toggleTheme}
+              aria-label="Toggle dark/light theme"
+            >
+              {theme === 'dark' ? '☀ Light theme' : '☾ Dark theme'}
+            </button>
+          </div>
           <div className="mobile-drawer__health">
             <span className={`status-indicator status-indicator--${gatewayTone}`} aria-hidden="true" />
             <span className="mobile-drawer__health-label">NEAR GATEWAY {healthLabel}</span>
@@ -332,6 +365,33 @@ export function App() {
                 title="Refresh gateway state"
               >
                 {isRefreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+
+              <button
+                type="button"
+                className="theme-toggle-btn"
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+                aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+                data-render-target="theme-toggle"
+              >
+                {theme === 'dark' ? (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="5" />
+                    <line x1="12" y1="1" x2="12" y2="3" />
+                    <line x1="12" y1="21" x2="12" y2="23" />
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                    <line x1="1" y1="12" x2="3" y2="12" />
+                    <line x1="21" y1="12" x2="23" y2="12" />
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                  </svg>
+                ) : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                  </svg>
+                )}
               </button>
             </div>
           </header>
