@@ -100,7 +100,7 @@ export function App() {
     },
     {
       id: 'guide',
-      label: 'Protocol',
+      label: 'How to Use',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="9" />
@@ -178,7 +178,7 @@ export function App() {
 
   const navDescriptions: Record<DashboardSection, string> = {
     overview: 'Executive gateway glance & live telemetry',
-    guide: 'Architecture walkthrough & protocol guide',
+    guide: 'Interactive step-by-step walkthrough: credentials, streaming, circuit breakers & recovery',
     value: 'Solver credit records; payouts unavailable',
     identity: 'Ed25519 session keys & credit balances',
     request: 'OpenAI-compatible SSE inference stream',

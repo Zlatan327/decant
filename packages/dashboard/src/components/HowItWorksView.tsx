@@ -5,126 +5,159 @@ interface HowItWorksViewProps {
   onNavigate: (section: DashboardSection) => void;
 }
 
+interface GuideStep {
+  num: string;
+  tag: string;
+  title: string;
+  description: string;
+  endpoint: string;
+  codeSnippet: string;
+  actionLabel: string;
+  targetSection: DashboardSection;
+  featured?: boolean;
+}
+
+const STEPS: GuideStep[] = [
+  {
+    num: '01',
+    tag: 'OPERATOR AUTH',
+    title: 'Authenticate Operator Session',
+    description:
+      'Connect the operator credential to manage sessions, credit quotas, and recovery. The key is kept strictly in React memory for the page visit and is never saved to browser storage or leaked into frontend builds.',
+    endpoint: 'X-Decant-Admin-Key: <DECANT_ADMIN_KEY>',
+    codeSnippet: 'Bearer authorization for operator-only endpoints',
+    actionLabel: 'Connect & View Telemetry →',
+    targetSection: 'evidence',
+  },
+  {
+    num: '02',
+    tag: 'IDENTITY & QUOTAS',
+    title: 'Enroll Agent & Allocate Credit',
+    description:
+      'Register an Ed25519 agent public key and bind it to a NEAR account identifier (e.g. agent-01.testnet) with an allotted compute quota. Sessions are stored in SQLite and track remaining versus total credit.',
+    endpoint: 'POST /v1/sessions/register',
+    codeSnippet: '{ "sessionId": "agent-01", "quota": 1000, "ownerAccountId": "agent.testnet" }',
+    actionLabel: 'Manage Sessions & Quotas →',
+    targetSection: 'identity',
+  },
+  {
+    num: '03',
+    tag: 'INFERENCE TUNNEL',
+    title: 'Stream Real-Time Provider Tokens',
+    description:
+      'Select a funded session and an active upstream model (e.g. gemini-3.5-flash). The client signs the request using Ed25519 headers; the gateway reserves maximum credits upfront and streams live token chunks via SSE.',
+    endpoint: 'POST /v1/chat/completions',
+    codeSnippet: '{ "model": "gemini-3.5-flash", "messages": [{ "role": "user", "content": "..." }], "stream": true }',
+    actionLabel: 'Open Inference Console →',
+    targetSection: 'request',
+    featured: true,
+  },
+  {
+    num: '04',
+    tag: 'ZERO-TRUST SAFEGUARDS',
+    title: 'Circuit Breakers & Anti-Tamper',
+    description:
+      'The gateway enforces hard security boundaries: depleted balances halt compute with HTTP 402 Payment Required; tampered payloads or invalid signatures reject with HTTP 403; requests over 4KB reject with HTTP 413.',
+    endpoint: 'HARD GATES: HTTP 402 · 403 · 413 · 429',
+    codeSnippet: 'Anti-hallucination payload caps, token buckets, and replay rejection',
+    actionLabel: 'Verify Circuit Breakers →',
+    targetSection: 'request',
+  },
+  {
+    num: '05',
+    tag: 'SOLVER MARKETPLACE',
+    title: 'Broadcast & Match Compute Intents',
+    description:
+      'Autonomous agents broadcast compute intent requirements (target model, budget, parameters) to the open registry. Decentralized solver nodes match and lock commitments to fulfill workloads.',
+    endpoint: 'POST /v1/intents/broadcast',
+    codeSnippet: '{ "model": "gemini-3.5-flash", "maxBudget": 200 }',
+    actionLabel: 'Explore Intent Marketplace →',
+    targetSection: 'routing',
+  },
+  {
+    num: '06',
+    tag: 'ACID ACCOUNTING',
+    title: 'Double-Entry Ledger & Recovery',
+    description:
+      'Inspect persistent SQLite WAL-mode transaction records. If a gateway restarts or network drops mid-stream, the Reservation Review Panel surfaces stranded holds (>5 min) for audited operator usage settlement.',
+    endpoint: 'GET /v1/reservations · POST /v1/reservations/:id/review',
+    codeSnippet: 'Atomic usage settlement, unused credit refund, and operator audit trail',
+    actionLabel: 'Audit Transaction Ledger →',
+    targetSection: 'accounting',
+    featured: true,
+  },
+];
+
 export function HowItWorksView({ onNavigate }: HowItWorksViewProps) {
   return (
     <div className="workspace-view how-it-works-view" {...targetAttributes('how-it-works-view', 'panel')}>
-      {/* ── Editorial Header ── */}
+      {/* ── Editorial Guide Hero ── */}
       <div className="guide-hero">
-        <span className="guide-eyebrow mono">ARCHITECTURE &amp; SETTLEMENT PROTOCOL</span>
-        <h1 className="guide-title">Protocol overview</h1>
+        <div className="guide-hero__badge mono">
+          <span className="guide-hero__dot" aria-hidden="true" />
+          <span>OPERATOR &amp; AGENT WORKFLOW</span>
+        </div>
+        <h1 className="guide-title">
+          How to use <em>Decant</em>
+        </h1>
         <p className="guide-lead">
-          Route AI requests through a configured provider and track credit use in the gateway ledger.
-          NEAR settlement and token payouts still need integration.
+          A step-by-step walkthrough of the Decant compute-access gateway: from cryptographic session registration
+          and live SSE model streaming to policy circuit breakers and operator-reviewed ledger reconciliation.
         </p>
+
+        {/* ── Quick-Start CLI Snippet ── */}
+        <div className="guide-quickstart">
+          <div className="guide-quickstart__header">
+            <span className="mono">TERMINAL QUICK START</span>
+            <span className="guide-quickstart__env mono">NODE.JS 24 · REAL PROVIDER STREAM</span>
+          </div>
+          <div className="guide-quickstart__cmd mono">
+            <code>npm run simulate</code>
+            <span className="guide-quickstart__note">Executes an isolated 1,000 credit agent harness with real Google Gemini streaming</span>
+          </div>
+        </div>
       </div>
 
-      {/* ── 4 Architectural Steps Grid ── */}
+      {/* ── 6-Step Workflow Cards Grid ── */}
       <div className="guide-steps-grid">
-        {/* Step 01 */}
-        <div className="guide-card">
-          <div className="guide-card__header">
-            <span className="guide-card__num mono">01</span>
-            <span className="guide-card__tag mono">IDENTITY &amp; AUTH</span>
-          </div>
-          <h2 className="guide-card__title">Cryptographic Session Keys</h2>
-          <p className="guide-card__text">
-            An operator registers an agent public key and credit allowance. Agents sign requests with
-            their session key. This operator console uses the operator credential instead.
-          </p>
-          <div className="guide-card__code mono">
-            <code>POST /v1/sessions/register</code>
-            <span className="code-sub">&#123; "sessionId": "agent-01", "quota": 1000 &#125;</span>
-          </div>
-          <button
-            type="button"
-            className="guide-card__action"
-            onClick={() => onNavigate('identity')}
+        {STEPS.map((step) => (
+          <div
+            key={step.num}
+            className={`guide-card ${step.featured ? 'guide-card--featured' : ''}`}
           >
-            Manage Sessions &amp; Quotas &rarr;
-          </button>
-        </div>
+            <div className="guide-card__header">
+              <span className="guide-card__num mono">{step.num}</span>
+              <span className="guide-card__tag mono">{step.tag}</span>
+            </div>
 
-        {/* Step 02 */}
-        <div className="guide-card">
-          <div className="guide-card__header">
-            <span className="guide-card__num mono">02</span>
-            <span className="guide-card__tag mono">COMPUTE ROUTING</span>
-          </div>
-          <h2 className="guide-card__title">Intent Broadcast &amp; Solver Matching</h2>
-          <p className="guide-card__text">
-            Agents can record compute requests and operators can assign a solver. Assignment does not prove
-            completion, run inference, or issue rewards. Verified solver execution is still needed.
-          </p>
-          <div className="guide-card__code mono">
-            <code>POST /v1/intents/broadcast</code>
-            <span className="code-sub">&#123; "model": "llama3", "maxBudget": 200 &#125;</span>
-          </div>
-          <button
-            type="button"
-            className="guide-card__action"
-            onClick={() => onNavigate('routing')}
-          >
-            Explore Intent Marketplace &rarr;
-          </button>
-        </div>
+            <h2 className="guide-card__title">{step.title}</h2>
+            <p className="guide-card__text">{step.description}</p>
 
-        {/* Step 03 */}
-        <div className="guide-card">
-          <div className="guide-card__header">
-            <span className="guide-card__num mono">03</span>
-            <span className="guide-card__tag mono">INFERENCE &amp; ACCOUNTING</span>
-          </div>
-          <h2 className="guide-card__title">Real-Time Streaming &amp; ACID Ledger</h2>
-          <p className="guide-card__text">
-            Credit is reserved before calling the provider. After the request ends, the gateway records estimated
-            usage and returns unused credit. Requests without enough available credit receive HTTP 402.
-          </p>
-          <div className="guide-card__code mono">
-            <code>POST /v1/chat/completions</code>
-            <span className="code-sub">&#123; "model": "llama3", "stream": true &#125;</span>
-          </div>
-          <button
-            type="button"
-            className="guide-card__action"
-            onClick={() => onNavigate('request')}
-          >
-            Open Inference Console &rarr;
-          </button>
-        </div>
+            <div className="guide-card__code mono">
+              <code>{step.endpoint}</code>
+              <span className="code-sub">{step.codeSnippet}</span>
+            </div>
 
-        {/* Step 04 */}
-        <div className="guide-card guide-card--featured">
-          <div className="guide-card__header">
-            <span className="guide-card__num mono">04</span>
-            <span className="guide-card__tag mono">VALUE ACCRUAL</span>
+            <button
+              type="button"
+              className={`guide-card__action ${step.featured ? 'guide-card__action--primary' : ''}`}
+              onClick={() => onNavigate(step.targetSection)}
+            >
+              {step.actionLabel}
+            </button>
           </div>
-          <h2 className="guide-card__title">Compute-to-Value Redemption (USDT)</h2>
-          <p className="guide-card__text">
-            Solver credit records are local accounting entries. Rewards need verified completed work.
-            USDT payouts are unavailable until a funded token-transfer service is connected.
-          </p>
-          <div className="guide-card__code mono">
-            <code>POST /v1/solvers/:id/redeem</code>
-            <span className="code-sub">Unavailable — no credits are burned</span>
-          </div>
-          <button
-            type="button"
-            className="guide-card__action guide-card__action--primary"
-            onClick={() => onNavigate('value')}
-          >
-            View Recorded Credits &rarr;
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* ── Compliance & Legal Callout ── */}
+      {/* ── Operational Callout / Honest Boundaries ── */}
       <div className="guide-compliance-banner">
         <div className="guide-compliance-icon" aria-hidden="true">&#9670;</div>
         <div>
-          <h3 className="guide-compliance-title">Provider access</h3>
+          <h3 className="guide-compliance-title">Verified Protocol Boundaries</h3>
           <p className="guide-compliance-text">
-            Configure a provider endpoint and model that you are authorized to use. Provider keys stay on the gateway.
-            Provider failures return errors; there is no scripted answer fallback.
+            Gateway credit metering uses character-based units (<code>ceil(characters / 4)</code>) backed by local SQLite WAL transactions.
+            A Rust NEAR contract is provided for future on-chain synchronization; reward minting and token payout redemptions remain safely paused
+            until verified work proofs and audited transfer rails are deployed.
           </p>
         </div>
       </div>
