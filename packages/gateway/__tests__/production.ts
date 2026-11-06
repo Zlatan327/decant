@@ -16,6 +16,11 @@ import { DecantClient } from "../../agent-sdk/src/client.js";
 import { KeyPair, KeyPairEd25519 } from "near-api-js";
 import { resetBuckets } from "../src/policy.js";
 
+// Test-only operator credential for routes that mutate or list private ledger state.
+function operatorFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(input, { ...init, headers: { "X-Decant-Admin-Key": "test-operator-key", ...init.headers } });
+}
+
 describe("Decant Production Backend Suite", () => {
   let gateway: DecantGatewayServer;
   let gatewayPort: number;
@@ -27,7 +32,7 @@ describe("Decant Production Backend Suite", () => {
     gateway = new DecantGatewayServer({
       port: 0,
       dbPath: ":memory:",
-      enableCryptoVerification: true,
+      adminKey: "test-operator-key",
     });
     gatewayPort = await gateway.start("127.0.0.1");
 
@@ -48,7 +53,7 @@ describe("Decant Production Backend Suite", () => {
 
   // ─── Test 1: Health & Diagnostics ─────────────────────────────────────────
   it("GET /v1/health: reports healthy SQLite ledger and system status", async () => {
-    const res = await fetch(`http://127.0.0.1:${gatewayPort}/v1/health`);
+    const res = await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/health`);
     assert.equal(res.status, 200);
     const json = await res.json() as any;
     assert.equal(json.status, "healthy");
@@ -58,7 +63,7 @@ describe("Decant Production Backend Suite", () => {
 
   // ─── Test 2: Session Registration & On-Chain Quota Delegation ─────────────
   it("POST /v1/sessions/register: mints credit quota on persistent ledger", async () => {
-    const res = await fetch(`http://127.0.0.1:${gatewayPort}/v1/sessions/register`, {
+    const res = await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/sessions/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -117,7 +122,7 @@ describe("Decant Production Backend Suite", () => {
   });
 
   it("Security: gracefully rejects malformed JSON payloads with HTTP 400 Bad Request", async () => {
-    const res = await fetch(`http://127.0.0.1:${gatewayPort}/v1/sessions/register`, {
+    const res = await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/sessions/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{ this is invalid json !!!",
@@ -156,11 +161,11 @@ describe("Decant Production Backend Suite", () => {
     assert.equal(intentRes.status, "open");
 
     // List open intents
-    const listRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/intents`)).json() as any;
+    const listRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/intents`)).json() as any;
     assert.ok(listRes.intents.some((i: any) => i.intentId === intentRes.intentId));
 
     // Solver fills intent
-    const fillRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/intents/${intentRes.intentId}/fill`, {
+    const fillRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/intents/${intentRes.intentId}/fill`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ solverId: "hyperbolic-node-99.near" }),
@@ -168,6 +173,7 @@ describe("Decant Production Backend Suite", () => {
 
     assert.equal(fillRes.status, "filled");
     assert.equal(fillRes.solverId, "hyperbolic-node-99.near");
+    assert.equal(gateway.ledger.getSolverEarnings("hyperbolic-node-99.near"), 0, "Assignment must not mint rewards");
   });
 
   // ─── Test 6: Circuit Breaker on Quota Exhaustion ──────────────────────────
@@ -195,7 +201,7 @@ describe("Decant Production Backend Suite", () => {
 
   // ─── Test 7: Top-up Quota Re-enables Access ───────────────────────────────
   it("Top-up: credit replenishment restores immediate agent access", async () => {
-    const topupRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/sessions/${testClient.sessionId}/topup`, {
+    const topupRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/sessions/${testClient.sessionId}/topup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount: 100 }),
@@ -212,7 +218,7 @@ describe("Decant Production Backend Suite", () => {
 
   // ─── Test 8: Global Sessions List ─────────────────────────────────────────
   it("GET /v1/sessions: lists all registered sessions from persistent ledger", async () => {
-    const res = await fetch(`http://127.0.0.1:${gatewayPort}/v1/sessions`);
+    const res = await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/sessions`);
     assert.equal(res.status, 200);
     const json = await res.json() as any;
     assert.ok(Array.isArray(json.sessions));
@@ -222,7 +228,7 @@ describe("Decant Production Backend Suite", () => {
 
   // ─── Test 9: Global Transactions Audit ────────────────────────────────────
   it("GET /v1/transactions: returns recent global transaction records", async () => {
-    const res = await fetch(`http://127.0.0.1:${gatewayPort}/v1/transactions`);
+    const res = await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/transactions`);
     assert.equal(res.status, 200);
     const json = await res.json() as any;
     assert.ok(Array.isArray(json.transactions));
@@ -234,11 +240,11 @@ describe("Decant Production Backend Suite", () => {
   it("GET/POST /v1/solvers/:id/earnings: tracks compute workload credits", async () => {
     const solverId = "node-alpha.near";
     // Check initial
-    const initialRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/earnings`)).json() as any;
+    const initialRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/earnings`)).json() as any;
     assert.equal(initialRes.earnedCredits, 0);
 
     // Reward solver for compute execution
-    const rewardRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/reward`, {
+    const rewardRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/reward`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount: 1500 }),
@@ -252,7 +258,7 @@ describe("Decant Production Backend Suite", () => {
   it("POST /v1/solvers/:id/redeem: burns earned credits for spendable USDT", async () => {
     const solverId = "node-alpha.near";
     // Redeem 1000 credits for $1.00 USDT
-    const redeemRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/redeem`, {
+    const redeemRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/redeem`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ credits: 1000 }),
@@ -265,12 +271,12 @@ describe("Decant Production Backend Suite", () => {
     assert.equal(redeemRes.redemption.status, "Settled");
 
     // Verify remaining balance
-    const checkRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/earnings`)).json() as any;
+    const checkRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/earnings`)).json() as any;
     assert.equal(checkRes.earnedCredits, 500); // 1500 - 1000
     assert.equal(checkRes.usdtFormatted, "0.50");
 
     // Verify redemptions list
-    const listRes = await (await fetch(`http://127.0.0.1:${gatewayPort}/v1/redemptions`)).json() as any;
+    const listRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/redemptions`)).json() as any;
     assert.ok(Array.isArray(listRes.redemptions));
     assert.ok(listRes.redemptions.some((r: any) => r.redemptionId === redeemRes.redemption.redemptionId));
   });

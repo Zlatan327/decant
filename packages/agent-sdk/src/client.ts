@@ -65,7 +65,7 @@ export class DecantClient {
     if (this.enableSigning) {
       const bodyHash = createHash("sha256").update(body).digest("hex");
       const digest = createHash("sha256")
-        .update(`${method.toUpperCase()}:${path}:${timestamp}:${bodyHash}`)
+        .update(`${method.toUpperCase()}:${path}:${timestamp}:${this.sessionId}:${bodyHash}`)
         .digest();
 
       const signature = this.keyPair.sign(digest);

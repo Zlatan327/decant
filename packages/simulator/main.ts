@@ -41,7 +41,6 @@ async function main() {
   const gateway = new DecantGatewayServer({
     port: 0,
     dbPath: ":memory:",
-    enableCryptoVerification: true,
   });
   const gatewayPort = await gateway.start("127.0.0.1");
   console.log(`  ✔ Gateway online on http://127.0.0.1:${gatewayPort}`);

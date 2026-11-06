@@ -8,10 +8,11 @@
     "build": "tsc",
     "dev": "tsx src/proxy.ts",
     "seed": "tsx src/seed.ts",
-    "test": "tsx --test __tests__/wire.ts __tests__/depin.ts __tests__/production.ts",
-    "test:wire": "tsx --test __tests__/wire.ts",
-    "test:depin": "tsx --test __tests__/depin.ts",
-    "test:prod": "tsx --test __tests__/production.ts"
+    "test": "node --import tsx --test __tests__/wire.ts __tests__/depin.ts __tests__/production.ts __tests__/security.ts",
+    "test:wire": "node --import tsx --test __tests__/wire.ts",
+    "test:depin": "node --import tsx --test __tests__/depin.ts",
+    "test:prod": "node --import tsx --test __tests__/production.ts",
+    "test:security": "node --import tsx --test __tests__/security.ts"
   },
   "dependencies": {
     "@google/genai": "^2.29.1",

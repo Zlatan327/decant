@@ -13,7 +13,6 @@ const DB_PATH = process.env["DATABASE_PATH"] ?? "data/decant.db";
 const gateway = new DecantGatewayServer({
   port: PORT,
   dbPath: DB_PATH,
-  enableCryptoVerification: process.env["ENABLE_CRYPTO_VERIFY"] === "true",
 });
 
 gateway.start().catch((err) => {

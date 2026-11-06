@@ -10,6 +10,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { DecantLedger } from "./db.js";
 import { DecantCrypto } from "./crypto.js";
@@ -19,7 +20,8 @@ import { enforceRateLimit, enforcePayloadSize } from "./policy.js";
 export interface GatewayServerOptions {
   port?: number;
   dbPath?: string;
-  enableCryptoVerification?: boolean;
+  /** Operator credential. If absent, operator-only routes fail closed. */
+  adminKey?: string;
 }
 
 export class DecantGatewayServer {
@@ -28,13 +30,13 @@ export class DecantGatewayServer {
   public readonly compute: DecantComputeEngine;
   private port: number;
   private assignedPort: number = 0;
-  private enableCrypto: boolean;
+  private readonly adminKey: string | undefined;
 
   constructor(opts: GatewayServerOptions = {}) {
     this.port = opts.port ?? parseInt(process.env["PORT"] ?? "8080", 10);
     this.ledger = new DecantLedger(opts.dbPath ?? (process.env["DATABASE_URL"] ?? ":memory:"));
     this.compute = new DecantComputeEngine();
-    this.enableCrypto = opts.enableCryptoVerification ?? (process.env["ENABLE_CRYPTO_VERIFY"] === "true");
+    this.adminKey = opts.adminKey ?? process.env["DECANT_ADMIN_KEY"];
 
     this.server = createServer((req, res) => this.handleRequest(req, res));
   }
@@ -98,6 +100,40 @@ export class DecantGatewayServer {
     }
   }
 
+  private isOperator(req: IncomingMessage): boolean {
+    const supplied = req.headers["x-decant-admin-key"];
+    if (!this.adminKey || typeof supplied !== "string") return false;
+    const actual = Buffer.from(supplied);
+    const expected = Buffer.from(this.adminKey);
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  }
+
+  private authorizeSession(req: IncomingMessage, res: ServerResponse, sessionId: string, body: string): boolean {
+    const session = typeof sessionId === "string" ? this.ledger.getSession(sessionId) : null;
+    if (!session) {
+      this.sendJson(res, 401, { error: "Unauthorized — session is not registered" }, {}, req);
+      return false;
+    }
+    if (session.status === "suspended") {
+      this.sendJson(res, 403, { error: "Session is suspended" }, {}, req);
+      return false;
+    }
+    if (this.isOperator(req)) return true;
+    const signature = req.headers["x-decant-signature"];
+    const headerSession = req.headers["x-decant-session"];
+    const timestamp = Number(req.headers["x-decant-timestamp"]);
+    if (headerSession !== sessionId || typeof signature !== "string") {
+      this.sendJson(res, 401, { error: "Unauthorized — signed session request required" }, {}, req);
+      return false;
+    }
+    if (!DecantCrypto.verifySignature(session.publicKey, signature, req.method ?? "GET",
+      new URL(req.url ?? "/", "http://localhost").pathname, timestamp, body, sessionId) || !this.ledger.claimSignature(signature, timestamp)) {
+      this.sendJson(res, 403, { error: "Forbidden — invalid or replayed signature" }, {}, req);
+      return false;
+    }
+    return true;
+  }
+
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
@@ -117,7 +153,7 @@ export class DecantGatewayServer {
           status: "healthy",
           uptime: process.uptime(),
           ledger: "sqlite-acid-persistent",
-          nearSync: "active",
+          nearSync: "not-connected",
           timestamp: Date.now(),
         }, {}, req);
         return;
@@ -130,6 +166,7 @@ export class DecantGatewayServer {
           this.sendJson(res, 401, { error: "Unauthorized — missing X-Decant-Session header" }, {}, req);
           return;
         }
+        if (!this.authorizeSession(req, res, sessionId, "")) return;
         if (!enforceRateLimit(req, res)) return;
 
         this.sendJson(res, 200, {
@@ -150,7 +187,8 @@ export class DecantGatewayServer {
         if (!enforcePayloadSize(req, res)) return;
         if (!enforceRateLimit(req, res)) return;
 
-        const raw = await this.parseBody(req);
+        const raw = await this.parseBody(req, 4 * 1024);
+        if (!this.authorizeSession(req, res, sessionId, raw)) return;
         this.sendJson(res, 200, {
           echo: true,
           method: "POST",
@@ -161,12 +199,23 @@ export class DecantGatewayServer {
         return;
       }
 
-      const adminKey = process.env["DECANT_ADMIN_KEY"];
-      const isAuthorizedAdmin = (r: IncomingMessage): boolean => {
-        if (!adminKey) return true;
-        const key = r.headers["x-decant-admin-key"] as string;
-        return key === adminKey;
-      };
+      const isAuthorizedAdmin = (r: IncomingMessage): boolean => this.isOperator(r);
+
+      // Operator metadata and credit mutations are never public. Health stays public.
+      const operatorRoute = pathname === "/v1/sessions/register"
+        || pathname === "/v1/sessions"
+        || pathname === "/v1/transactions"
+        || pathname === "/v1/intents"
+        || pathname === "/v1/redemptions"
+        || /^\/v1\/sessions\/[^/]+\/topup$/.test(pathname)
+        || /^\/v1\/intents\/[^/]+\/fill$/.test(pathname)
+        || /^\/v1\/solvers\/[^/]+\/(earnings|reward|redeem)$/.test(pathname);
+      if (operatorRoute && !isAuthorizedAdmin(req)) {
+        this.sendJson(res, this.adminKey ? 403 : 503, {
+          error: this.adminKey ? "Forbidden — valid operator key required" : "Operator access is not configured",
+        }, {}, req);
+        return;
+      }
 
       // ── Session Registration & Management ───────────────────────────────────
       if (pathname === "/v1/sessions/register" && method === "POST") {
@@ -197,8 +246,9 @@ export class DecantGatewayServer {
         return;
       }
 
-      if (pathname.startsWith("/v1/sessions/") && method === "GET") {
-        const sessionId = pathname.split("/")[3];
+      if (/^\/v1\/sessions\/[^/]+$/.test(pathname) && method === "GET") {
+        const sessionId = decodeURIComponent(pathname.split("/")[3]);
+        if (!this.authorizeSession(req, res, sessionId, "")) return;
         const session = this.ledger.getSession(sessionId);
         if (!session) {
           this.sendJson(res, 404, { error: `Session '${sessionId}' not found` }, {}, req);
@@ -210,12 +260,12 @@ export class DecantGatewayServer {
         return;
       }
 
-      if (pathname.includes("/topup") && method === "POST") {
+      if (/^\/v1\/sessions\/[^/]+\/topup$/.test(pathname) && method === "POST") {
         if (!isAuthorizedAdmin(req)) {
           this.sendJson(res, 403, { error: "Forbidden — missing or invalid X-Decant-Admin-Key" }, {}, req);
           return;
         }
-        const sessionId = pathname.split("/")[3];
+        const sessionId = decodeURIComponent(pathname.split("/")[3]);
         const body = await this.parseJsonBody(req);
         if (!body.amount || body.amount <= 0) {
           this.sendJson(res, 400, { error: "Valid 'amount' required" }, {}, req);
@@ -239,8 +289,10 @@ export class DecantGatewayServer {
 
       // ── Intent Registry ─────────────────────────────────────────────────────
       if (pathname === "/v1/intents/broadcast" && method === "POST") {
-        const body = await this.parseJsonBody(req);
+        const rawBody = await this.parseBody(req);
+        const body = JSON.parse(rawBody || "{}");
         const { sessionId, model, maxBudget } = body;
+        if (!this.authorizeSession(req, res, sessionId, rawBody)) return;
 
         if (!sessionId || !maxBudget) {
           this.sendJson(res, 400, { error: "Missing required fields: sessionId, maxBudget" }, {}, req);
@@ -262,14 +314,13 @@ export class DecantGatewayServer {
         return;
       }
 
-      if (pathname.includes("/fill") && method === "POST") {
-        const intentId = pathname.split("/")[3];
+      if (/^\/v1\/intents\/[^/]+\/fill$/.test(pathname) && method === "POST") {
+        const intentId = decodeURIComponent(pathname.split("/")[3]);
         const body = await this.parseJsonBody(req);
         const solverId = body.solverId ?? "solver-default.near";
         try {
           const intent = this.ledger.fillIntent(intentId, solverId);
-          // Reward solver with compute credits for taking on the workload
-          this.ledger.recordSolverEarnings(solverId, intent.maxBudget || 50);
+          // Assignment is not proof of completed compute; do not issue rewards here.
           this.sendJson(res, 200, intent, {}, req);
         } catch (err: any) {
           this.sendJson(res, 400, { error: err.message }, {}, req);
@@ -279,7 +330,7 @@ export class DecantGatewayServer {
 
       // ── Solver Earnings & Compute-to-Value Redemption ───────────────────────
       if (pathname.startsWith("/v1/solvers/") && pathname.endsWith("/earnings") && method === "GET") {
-        const solverId = pathname.split("/")[3];
+        const solverId = decodeURIComponent(pathname.split("/")[3]);
         const earned = this.ledger.getSolverEarnings(solverId);
         this.sendJson(res, 200, {
           solverId,
@@ -292,7 +343,7 @@ export class DecantGatewayServer {
       }
 
       if (pathname.startsWith("/v1/solvers/") && pathname.endsWith("/reward") && method === "POST") {
-        const solverId = pathname.split("/")[3];
+        const solverId = decodeURIComponent(pathname.split("/")[3]);
         const body = await this.parseJsonBody(req);
         const amount = Number(body.amount ?? 100);
         const newTotal = this.ledger.recordSolverEarnings(solverId, amount);
@@ -305,7 +356,7 @@ export class DecantGatewayServer {
       }
 
       if (pathname.startsWith("/v1/solvers/") && pathname.endsWith("/redeem") && method === "POST") {
-        const solverId = pathname.split("/")[3];
+        const solverId = decodeURIComponent(pathname.split("/")[3]);
         const body = await this.parseJsonBody(req);
         const credits = Number(body.credits ?? 0);
         try {
@@ -339,39 +390,9 @@ export class DecantGatewayServer {
         if (!enforcePayloadSize(req, res)) return;
         if (!enforceRateLimit(req, res)) return;
 
-        const rawBody = await this.parseBody(req);
+        const rawBody = await this.parseBody(req, 4 * 1024);
 
-        // 3. Cryptographic Ed25519 Signature Verification
-        // Enforced if enableCrypto is configured, or whenever X-Decant-Signature is supplied
-        const sig = req.headers["x-decant-signature"] as string;
-        if (this.enableCrypto || sig) {
-          if (!sig) {
-            this.sendJson(res, 401, { error: "Unauthorized — missing required cryptographic signature header (X-Decant-Signature)" }, {}, req);
-            return;
-          }
-
-          const ts = parseInt((req.headers["x-decant-timestamp"] as string) ?? "0", 10);
-          const session = this.ledger.getSession(sessionId);
-
-          if (!session) {
-            this.sendJson(res, 401, { error: "Unauthorized — session not registered on-chain" }, {}, req);
-            return;
-          }
-
-          const isValid = DecantCrypto.verifySignature(
-            session.publicKey,
-            sig,
-            method,
-            pathname,
-            ts,
-            rawBody
-          );
-
-          if (!isValid) {
-            this.sendJson(res, 403, { error: "Forbidden — invalid cryptographic signature" }, {}, req);
-            return;
-          }
-        }
+        if (!this.authorizeSession(req, res, sessionId, rawBody)) return;
 
         // 4. On-Chain Ledger Quota Verification
         const session = this.ledger.getSession(sessionId);

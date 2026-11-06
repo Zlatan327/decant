@@ -21,6 +21,12 @@ export function gatewayUrl(path: string): string {
   return `${gatewayApiBase}${normalizedPath}`;
 }
 
+let operatorKey = '';
+export function setOperatorKey(value: string): void { operatorKey = value.trim(); }
+export function operatorHeaders(): Record<string, string> {
+  return operatorKey ? { 'X-Decant-Admin-Key': operatorKey } : {};
+}
+
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly path: string;
@@ -98,7 +104,7 @@ export async function parseApiError(response: Response, path: string): Promise<A
   return new ApiRequestError(response.status, path, message);
 }
 
-async function requestJson(path: string, init?: RequestInit): Promise<unknown> {
+export async function requestJson(path: string, init?: RequestInit): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(gatewayUrl(path), {
@@ -106,6 +112,7 @@ async function requestJson(path: string, init?: RequestInit): Promise<unknown> {
       credentials: 'omit',
       headers: {
         Accept: 'application/json',
+        ...operatorHeaders(),
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
         ...init?.headers,
       },

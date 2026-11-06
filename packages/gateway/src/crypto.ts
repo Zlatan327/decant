@@ -58,10 +58,11 @@ export class DecantCrypto {
     method: string,
     path: string,
     timestamp: number,
-    body: string = ""
+    body: string = "",
+    sessionId: string = ""
   ): Uint8Array {
     const bodyHash = createHash("sha256").update(body).digest("hex");
-    const payload = `${method.toUpperCase()}:${path}:${timestamp}:${bodyHash}`;
+    const payload = `${method.toUpperCase()}:${path}:${timestamp}:${sessionId}:${bodyHash}`;
     return createHash("sha256").update(payload).digest();
   }
 
@@ -82,9 +83,10 @@ export class DecantCrypto {
     method: string,
     path: string,
     timestamp: number,
-    body: string = ""
+    body: string = "",
+    sessionId: string = ""
   ): boolean {
-    if (!signatureHex || typeof signatureHex !== "string") {
+    if (typeof signatureHex !== "string" || !/^[a-f0-9]{128}$/.test(signatureHex) || !Number.isSafeInteger(timestamp)) {
       return false;
     }
 
@@ -104,7 +106,7 @@ export class DecantCrypto {
         publicKeyBase58.startsWith("ed25519:") ? publicKeyBase58 : `ed25519:${publicKeyBase58}`
       );
 
-      const digest = this.createDigest(method, path, timestamp, body);
+      const digest = this.createDigest(method, path, timestamp, body, sessionId);
       const signatureBytes = Buffer.from(signatureHex, "hex");
 
       const isValid = pubKey.verify(digest, signatureBytes);

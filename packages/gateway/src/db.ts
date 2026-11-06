@@ -80,6 +80,10 @@ export class DecantLedger {
     }
 
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS used_signatures (
+        signature TEXT PRIMARY KEY,
+        expires_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS sessions (
         session_id TEXT PRIMARY KEY,
         public_key TEXT NOT NULL,
@@ -143,6 +147,13 @@ export class DecantLedger {
       CREATE INDEX IF NOT EXISTS idx_tx_session ON transactions(session_id);
       CREATE INDEX IF NOT EXISTS idx_redemptions_account ON redemptions(account_id);
     `);
+  }
+
+  /** Persistent replay barrier shared by gateway processes using this ledger. */
+  public claimSignature(signature: string, timestamp: number): boolean {
+    this.db.prepare("DELETE FROM used_signatures WHERE expires_at < ?").run(Date.now());
+    return this.db.prepare("INSERT OR IGNORE INTO used_signatures (signature, expires_at) VALUES (?, ?)")
+      .run(signature, timestamp + 60_000).changes === 1;
   }
 
   // ─── Session Management ───────────────────────────────────────────────────

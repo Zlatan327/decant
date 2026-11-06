@@ -1,5 +1,5 @@
 import { MAX_REQUEST_BODY_BYTES } from '../domain/constants';
-import { ApiRequestError, gatewayUrl, parseApiError } from './client';
+import { ApiRequestError, gatewayUrl, parseApiError, operatorHeaders } from './client';
 import type { SSEChunk } from '../domain/types';
 
 export interface ChatStreamInput {
@@ -68,6 +68,7 @@ export async function streamChatCompletion(input: ChatStreamInput): Promise<Chat
       signal: input.signal,
       headers: {
         Accept: 'text/event-stream',
+        ...operatorHeaders(),
         'Content-Type': 'application/json',
         'X-Decant-Session': input.sessionId,
       },

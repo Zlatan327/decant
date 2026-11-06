@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { gatewayTargetLabel } from './api/client';
+import { gatewayTargetLabel, setOperatorKey } from './api/client';
 import { ActivityFeed } from './components/ActivityFeed';
 import { DecantLogoMark } from './components/DecantLogo';
 import { CentralMinimalistHero } from './components/CentralMinimalistHero';
@@ -23,6 +23,8 @@ interface NavCategory {
 
 export function App() {
   const dashboard = useDashboardData();
+  const [operatorCredential, setOperatorCredential] = useState('');
+  const [operatorConnected, setOperatorConnected] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [activeSection, setActiveSection] = useState<DashboardSection>('overview');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -397,6 +399,26 @@ export function App() {
           </header>
 
           <main id="main-content" className="app-main" {...targetAttributes('decant-main-content', 'none')}>
+            <section className="panel" aria-label="Operator access">
+              <form className="inline-form" onSubmit={(event) => {
+                event.preventDefault();
+                setOperatorKey(operatorCredential);
+                setOperatorConnected(Boolean(operatorCredential.trim()));
+                setOperatorCredential('');
+                void dashboard.refresh();
+              }}>
+                <label htmlFor="operator-key">Operator key</label>
+                <div className="action-row">
+                  <input id="operator-key" type="password" autoComplete="off" value={operatorCredential}
+                    onChange={(event) => setOperatorCredential(event.target.value)} required />
+                  <button className="button button--primary" type="submit">Connect</button>
+                  {operatorConnected && <button className="button button--quiet" type="button" onClick={() => {
+                    setOperatorKey(''); setOperatorConnected(false); void dashboard.refresh();
+                  }}>Disconnect</button>}
+                </div>
+                <p className="field-note">{operatorConnected ? 'Key supplied for gateway requests.' : 'Enter your gateway operator key to manage sessions.'} The key is kept only for this page visit. Use HTTPS for a remote gateway.</p>
+              </form>
+            </section>
             {/* ── Section 1: Overview ── */}
             {activeSection === 'overview' && (
               <div className="workspace-view" key="overview">

@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "NEAR smart contracts — ledger for intents, escrowed quotas, and reputations",
+  "description": "NEAR smart contracts \u2014 ledger for intents, escrowed quotas, and reputations",
   "scripts": {
     "build": "cargo build --target wasm32-unknown-unknown --release",
     "test:cargo": "cargo test",
-    "test:sandbox": "tsx --test tests/sandbox.ts",
+    "test:sandbox": "node --import tsx --test tests/sandbox.ts",
     "test": "npm run test:sandbox"
   },
   "devDependencies": {
