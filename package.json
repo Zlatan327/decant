@@ -23,7 +23,8 @@
     "dev:gateway": "npm run dev --workspace=packages/gateway",
     "dev:dashboard": "npm run dev --workspace=packages/dashboard",
     "seed": "npm run seed --workspace=packages/gateway",
-    "simulate": "npm run start --workspace=packages/simulator"
+    "simulate": "npm run start --workspace=packages/simulator",
+    "deploy:testnet": "node scripts/deploy_testnet.cjs"
   },
   "engines": {
     "node": ">=24.0.0"
