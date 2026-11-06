@@ -29,6 +29,42 @@ The operator key stays in memory during the page visit. It is not saved in brows
 
 The Vite development proxy forwards `/v1` to the gateway. For a separately hosted frontend set `VITE_DECANT_API_BASE_URL` to the gateway HTTPS URL and `CORS_ORIGINS` to the frontend origin. Never place a secret in a `VITE_` variable.
 
+## Console walkthrough and user experience
+
+The Decant dashboard (`packages/dashboard`) is an operator console and live telemetry interface for monitoring gateway health, managing agent credentials, testing inference streaming, and auditing ledger records.
+
+### 1. Gateway health and operator connection (Overview)
+- **Telemetry bar:** Displays real-time gateway status (`HEALTHY` / `CONNECTING` / `OFFLINE`), observed ping latency, active configured models (e.g. `gemini-3.5-flash`), and SQLite ledger connectivity.
+- **Operator credential:** Click **Connect Operator** in the header to enter `DECANT_ADMIN_KEY`. The credential is kept strictly in React memory for the session and is never persisted to `localStorage` or leaked to frontend builds.
+- **Theme toggle:** Switch between editorial light mode and deep atmospheric dark mode with persistent browser preference.
+
+### 2. Cryptographic session enrollment (Sessions)
+- **Register session:** Generate or provide an Ed25519 public key (e.g. `ed25519:3t4...`), bind it to an agent account identifier (e.g. `autonomous-agent-01.testnet`), and allocate an initial compute credit quota.
+- **Session tracking:** View active sessions, bound public keys, remaining vs. total quota, and active versus suspended status.
+- **Quota replenishment:** Top up compute units for active or depleted sessions to restore access.
+
+### 3. Real-time inference streaming (Inference)
+- **Session selection:** Pick any registered, funded session key.
+- **Model routing:** Choose from gateway-configured upstream models.
+- **Live SSE stream viewer:** Enter a prompt and run inference. Requests are cryptographically signed using Ed25519 headers (`X-Decant-Session`, `X-Decant-Timestamp`, `X-Decant-Signature`). Tokens stream in real time from the upstream provider over Server-Sent Events (SSE).
+- **Instant credit settlement:** Prompt units and output tokens are metered with latency metrics, automatically debiting the session quota upon verified completion.
+
+### 4. Circuit breaker and policy verification
+- **Quota exhaustion lockout (HTTP 402):** When a session drains its allotted credits, the gateway immediately halts compute and returns `HTTP 402 Payment Required`.
+- **Anti-tamper protection (HTTP 403):** Requests with mismatched signatures, altered payloads, or invalid timestamps are rejected before contacting the model provider.
+- **Payload limits (HTTP 413):** Oversized request bodies exceeding 4KB are blocked at the wire.
+
+### 5. Compute intent marketplace (Routing)
+- **Broadcast intent:** Autonomous agents broadcast compute requirements (target model, credit budget, constraints) to the open registry.
+- **Solver matching:** Review open intents and simulate fulfillment assignments by decentralized solver nodes (e.g. `hyperbolic-solver-01.near`).
+
+### 6. Ledger audit and reservation recovery (Ledger)
+- **Double-entry audit log:** Inspect all SQLite ACID transaction records with transaction IDs, unit deductions, top-ups, and timestamps.
+- **Stalled reservation review:** The **Reservation Review Panel** surfaces unfinalized compute reservations older than 5 minutes (e.g. following network interruptions or process crashes). Authorized operators review evidence and attest usage before executing safe, idempotent settlements or refunds.
+
+### 7. Observed activity feed (Activity)
+- Real-time event stream logging gateway status codes (200, 401, 402, 403, 429), cryptographic verification checks, and provider interactions.
+
 ## Request authorization
 
 - Health is public. Operator listings and management routes require `X-Decant-Admin-Key`. Missing operator configuration fails closed.
