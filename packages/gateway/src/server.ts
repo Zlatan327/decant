@@ -31,6 +31,7 @@ export class DecantGatewayServer {
   public readonly compute: DecantComputeEngine;
   private port: number;
   private assignedPort: number = 0;
+  private readonly activeRequests = new Set<string>();
   private readonly adminKey: string | undefined;
 
   constructor(opts: GatewayServerOptions = {}) {
@@ -216,6 +217,8 @@ export class DecantGatewayServer {
         || pathname === "/v1/sessions"
         || pathname === "/v1/transactions"
         || pathname === "/v1/reservations"
+        || pathname === "/v1/reservation-reviews"
+        || /^\/v1\/reservations\/[^/]+\/review$/.test(pathname)
         || pathname === "/v1/intents"
         || pathname === "/v1/redemptions"
         || /^\/v1\/sessions\/[^/]+\/topup$/.test(pathname)
@@ -306,6 +309,21 @@ export class DecantGatewayServer {
 
       if (pathname === "/v1/reservations" && method === "GET") {
         this.sendJson(res, 200, { reservations: this.ledger.listReservations() }, {}, req);
+        return;
+      }
+
+      if (pathname === "/v1/reservation-reviews" && method === "GET") {
+        this.sendJson(res, 200, { reviews: this.ledger.listReservationReviews() }, {}, req);
+        return;
+      }
+      if (/^\/v1\/reservations\/[^/]+\/review$/.test(pathname) && method === "POST") {
+        const requestId = decodeURIComponent(pathname.split("/")[3]);
+        if (this.activeRequests.has(requestId)) {
+          this.sendJson(res, 409, { error: "Request is still active; do not review it" }, {}, req); return;
+        }
+        const review = await this.parseJsonBody(req, 4 * 1024);
+        const result = this.ledger.reviewReservation(requestId, review);
+        this.sendJson(res, 200, { review: result }, {}, req);
         return;
       }
 
@@ -433,6 +451,7 @@ export class DecantGatewayServer {
           this.sendJson(res, 402, { error: "Payment Required — insufficient available compute credit",
             required: promptUnits + maxTokens, remaining: session.remainingQuota }, {}, req); return;
         }
+        this.activeRequests.add(requestId);
         const streaming = payload.stream !== false;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 120_000);
@@ -490,6 +509,7 @@ export class DecantGatewayServer {
           }
         } finally {
           clearTimeout(timeout); controller.abort(); res.off("close", onClose);
+          this.activeRequests.delete(requestId);
           // A failed settlement keeps the durable reservation for operator review.
         }
         return;

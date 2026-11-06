@@ -56,6 +56,15 @@ export interface SolverRecord {
   isActive: boolean;
 }
 
+export const RECOVERY_MIN_AGE_MS = 5 * 60_000;
+export interface ReservationReview {
+  promptUnits: number;
+  completionUnits: number;
+  reason: string;
+  evidenceReference: string;
+  providerWorkStopped: boolean;
+}
+
 export class DecantLedger {
   private db: DatabaseSync;
 
@@ -80,6 +89,15 @@ export class DecantLedger {
     }
 
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS reservation_reviews (
+        request_id TEXT PRIMARY KEY,
+        prompt_units INTEGER NOT NULL,
+        completion_units INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        evidence_reference TEXT NOT NULL,
+        reviewed_at INTEGER NOT NULL,
+        reviewer_role TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS inference_reservations (
         request_id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL,
@@ -319,24 +337,74 @@ export class DecantLedger {
       const row = this.db.prepare("SELECT * FROM inference_reservations WHERE request_id = ?").get(requestId) as any;
       if (!row) throw new Error("Reservation not found");
       if (row.status === 'settled') throw new Error("Reservation already settled");
-      if (usedUnits > row.reserved_units) throw new Error("Usage exceeded reserved credit");
-      const refund = row.reserved_units - usedUnits;
-      this.db.prepare(`UPDATE sessions SET remaining_quota = remaining_quota + ?,
-        status = CASE WHEN status = 'suspended' THEN status WHEN remaining_quota + ? = 0 THEN 'exhausted' ELSE 'active' END
-        WHERE session_id = ?`).run(refund, refund, row.session_id);
-      this.db.prepare("UPDATE inference_reservations SET status = 'settled', used_units = ? WHERE request_id = ?")
-        .run(usedUnits, requestId);
-      if (usedUnits > 0) {
-        this.db.prepare(`INSERT INTO transactions
-          (tx_id, session_id, prompt_tokens, completion_tokens, cost_units, model, upstream_latency_ms, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(requestId, row.session_id, promptUnits, completionUnits, usedUnits, model, latencyMs, Date.now());
-      }
+      this.applyInferenceSettlement(row, requestId, usedUnits, promptUnits, completionUnits, model, latencyMs);
       this.db.exec("COMMIT;");
     } catch (error) {
       this.db.exec("ROLLBACK;");
       throw error;
     }
+  }
+
+  private applyInferenceSettlement(row: any, requestId: string, usedUnits: number, promptUnits: number,
+    completionUnits: number, model: string, latencyMs: number): void {
+    if (![usedUnits, promptUnits, completionUnits].every(v => Number.isSafeInteger(v) && v >= 0)
+      || !Number.isSafeInteger(promptUnits + completionUnits) || promptUnits + completionUnits !== usedUnits) {
+      throw new Error("Invalid usage breakdown");
+    }
+    if (usedUnits > row.reserved_units) throw new Error("Usage exceeded reserved credit");
+    const refund = row.reserved_units - usedUnits;
+    this.db.prepare(`UPDATE sessions SET remaining_quota = remaining_quota + ?,
+      status = CASE WHEN status = 'suspended' THEN status WHEN remaining_quota + ? = 0 THEN 'exhausted' ELSE 'active' END
+      WHERE session_id = ?`).run(refund, refund, row.session_id);
+    this.db.prepare("UPDATE inference_reservations SET status = 'settled', used_units = ? WHERE request_id = ?")
+      .run(usedUnits, requestId);
+    if (usedUnits > 0) {
+      this.db.prepare(`INSERT INTO transactions
+        (tx_id, session_id, prompt_tokens, completion_tokens, cost_units, model, upstream_latency_ms, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(requestId, row.session_id, promptUnits, completionUnits, usedUnits, model, latencyMs, Date.now());
+    }
+  }
+
+  /** Manual reconciliation, never an automatic expiry refund. Evidence is operator supplied. */
+  public reviewReservation(requestId: string, review: ReservationReview): unknown {
+    const reject = (message: string, statusCode: number): never => {
+      throw Object.assign(new Error(message), { statusCode });
+    };
+    if (review.providerWorkStopped !== true || typeof review.reason !== "string" || !review.reason.trim()
+      || review.reason.length > 1024 || typeof review.evidenceReference !== "string"
+      || !review.evidenceReference.trim() || review.evidenceReference.length > 2048
+      || ![review.promptUnits, review.completionUnits].every(v => Number.isSafeInteger(v) && v >= 0)
+      || !Number.isSafeInteger(review.promptUnits + review.completionUnits)) {
+      reject("Provide reviewed usage, reason, evidence reference and confirmation that provider work has stopped", 400);
+    }
+    this.db.exec("BEGIN IMMEDIATE TRANSACTION;");
+    try {
+      const row = this.db.prepare("SELECT * FROM inference_reservations WHERE request_id = ?").get(requestId) as any;
+      if (!row) reject("Reservation not found", 404);
+      if (row.status !== "reserved") reject("Reservation already settled", 409);
+      if (Date.now() - row.created_at < RECOVERY_MIN_AGE_MS) reject("Reservation is too recent to review; wait at least five minutes", 409);
+      const usedUnits = review.promptUnits + review.completionUnits;
+      if (usedUnits > row.reserved_units) reject("Reviewed usage exceeds reserved credit", 400);
+      this.applyInferenceSettlement(row, requestId, usedUnits, review.promptUnits,
+        review.completionUnits, "operator-reviewed", 0);
+      const reviewedAt = Date.now();
+      this.db.prepare(`INSERT INTO reservation_reviews
+        (request_id, prompt_units, completion_units, reason, evidence_reference, reviewed_at, reviewer_role)
+        VALUES (?, ?, ?, ?, ?, ?, 'operator')`).run(requestId, review.promptUnits,
+          review.completionUnits, review.reason.trim(), review.evidenceReference.trim(), reviewedAt);
+      this.db.exec("COMMIT;");
+      return { requestId, usedUnits, refundedUnits: row.reserved_units - usedUnits,
+        reason: review.reason.trim(), evidenceReference: review.evidenceReference.trim(),
+        reviewedAt, reviewerRole: "operator", verification: "operator-attested" };
+    } catch (error) {
+      this.db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  public listReservationReviews(): unknown[] {
+    return this.db.prepare("SELECT * FROM reservation_reviews ORDER BY reviewed_at DESC LIMIT 100").all();
   }
 
   public listReservations(): unknown[] {

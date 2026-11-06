@@ -14,4 +14,6 @@ The dev proxy sends `/v1` to `http://127.0.0.1:8080`; use `DECANT_GATEWAY_DEV_TA
 npm run build:dashboard
 ```
 
+The Accounting screen also supports manual review of credit held for unfinished requests. It requires reviewed usage, an evidence reference and stopped-work confirmation; the server enforces age, authorization and single-settlement rules.
+
 See the root README and `docs/PROGRESS.md` for metering, security, verification and deployment limitations. The existing visual design is retained.

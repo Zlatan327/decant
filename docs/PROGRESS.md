@@ -46,12 +46,12 @@ Scope: repair the existing compute gateway, operator console and contract. Keep 
 - Document Node 24, operator credentials, provider configuration, signed-request changes and current feature boundaries.
 - Add `.env.example` without secrets and repair the actual Rust unit-test script.
 - Clearly identify legacy in-memory RPC and text-stream fixtures as test infrastructure.
-- Add GitHub Actions for JavaScript tests/builds, actual Rust tests and the WebAssembly build. It has not run on GitHub because publishing is blocked.
+- Add GitHub Actions for JavaScript tests/builds, actual Rust tests and the WebAssembly build. The initial published branch passed both GitHub CI jobs.
 - Add the Decant README disclosure naming Isaac's independent Veyntro participation. The reciprocal disclosure in Veyntro remains outside this task's scope.
 
 ## Validation
 
-- JavaScript: 45 passed, 0 failed, 1 optional external NEAR RPC reachability probe skipped.
+- JavaScript: 53 passed, 0 failed, 1 optional external NEAR RPC reachability probe skipped.
 - Gateway and agent SDK TypeScript builds: passed.
 - Dashboard production build: passed. Browser layout has not been visually exercised.
 - Actual Rust unit tests: 14 passed.
@@ -65,9 +65,15 @@ Scope: repair the existing compute gateway, operator console and contract. Keep 
 2. Implement verified solver execution/completion receipts. Intent assignment is still separate from inference; no intent budget escrow or reward verification exists.
 3. Integrate a deployed NEAR contract with signed writes, receipt checks and reconciliation. Current on-chain quota allocation is owner-managed; public wallet/session ownership enrollment is still needed for a broader agent flow.
 4. Implement a funded token payout rail with transfer confirmation, idempotency and failure recovery before enabling redemption.
-5. Implement reviewed crash-reservation recovery after reconciling provider usage; never automatically refund unknown work.
+5. Exercise operator-reviewed reservation recovery against real provider records before deployment; never automatically refund unknown work.
 6. Complete deployment/HTTPS/durable storage setup and browser verification.
 
-## Publishing blocker
+## Follow-up: operator-reviewed reservation recovery
 
-The GitHub app reports `push: false` for `Zlatan327/decant`. Creating the remote branch returned HTTP 403, `Resource not accessible by integration`. The Git transport also has no usable push credentials. No upstream branch, commit or pull request has been created. Local commits and an export preserve the work for review; publishing requires repository write access through the GitHub connection.
+Implemented an authenticated manual review endpoint and a panel in the existing Accounting screen. Reservations must be at least five minutes old, not currently active on this gateway, and still unsettled. Operators provide reviewed input/output units, a reason, evidence reference and explicit confirmation that provider work has stopped. The gateway records this as operator-attested evidence, not independently verified provider proof.
+
+Usage settlement, unused-credit refund and audit insertion share one SQLite transaction. Duplicate reviews and later normal settlement cannot refund again. Audit insertion failure rolls everything back. Recent or unknown work is never automatically refunded. Eight additional real HTTP/SQLite tests cover authorization, review validation, age limits, partial/zero usage, suspended sessions, duplicate settlement and rollback.
+
+## Publishing status
+
+Write access is now available. The three initial correction commits are published on `fix/gateway-auth-credit-enforcement`, with pull request [#1](https://github.com/Zlatan327/decant/pull/1). Both initial GitHub CI jobs passed. Follow-up commits use the same review branch; no merge or deployment is implied.

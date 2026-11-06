@@ -51,7 +51,11 @@ The gateway deducts the full input-plus-output ceiling in an immediate SQLite tr
 
 Provider errors, missing completion markers and client disconnects cannot produce successful completion. No output means the reservation is refunded. Partial output is charged according to observed provider output; unused credit is refunded. Provider work is aborted on disconnect or after 120 seconds. A successful `[DONE]` is sent only after settlement succeeds.
 
-After a process crash or settlement failure, unresolved reservations remain deducted. Operators can inspect `GET /v1/reservations` with their key. Do not automatically refund these: first reconcile whether provider work occurred. A safe recovery workflow still needs implementation.
+After a process crash or settlement failure, unresolved reservations remain deducted. Operators can inspect `GET /v1/reservations` with their key. Do not automatically refund these: first reconcile whether provider work occurred.
+
+In the console's Accounting view, use **Credit held for unfinished requests** to review a reservation. It must be at least five minutes old (the normal request timeout is two minutes) and must not be active on this gateway. Enter reviewed input/output credit units, a reason and an actual provider record/evidence reference; explicitly confirm that provider work has stopped. Save only after checking those records.
+
+The corresponding operator-only endpoint is `POST /v1/reservations/:requestId/review`, with `promptUnits`, `completionUnits`, `reason`, `evidenceReference` and `providerWorkStopped: true`. It atomically records the review, settles the reviewed amount and returns unused credit once. `GET /v1/reservation-reviews` lists the audit. Unknown, recent or already-settled reservations are rejected. Evidence is **operator-attested**, not independently verified by the gateway. Recovery records use the model label `operator-reviewed`, not a claimed inference model. A failing audit write rolls back the refund too.
 
 ## Intent and payout boundaries
 

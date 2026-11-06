@@ -9,6 +9,7 @@ import { HealthBar } from './components/HealthBar';
 import { IntentBoard } from './components/IntentBoard';
 import { SessionPanel } from './components/SessionPanel';
 import { StreamViewer } from './components/StreamViewer';
+import { ReservationReviewPanel } from './components/ReservationReviewPanel';
 import { TransactionAudit } from './components/TransactionAudit';
 import type { DashboardSection } from './components/SidebarNav';
 import { formatDateTime } from './domain/format';
@@ -594,6 +595,7 @@ export function App() {
 
                 <div className="workspace-view--single">
                   <TransactionAudit transactions={dashboard.state.transactions} />
+                  <ReservationReviewPanel onReviewed={() => void dashboard.refresh()} />
                 </div>
               </div>
             )}
