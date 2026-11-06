@@ -1,4 +1,14 @@
-import "dotenv/config";
+import { existsSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
+import dotenv from "dotenv";
+
+const rootEnv = resolve(import.meta.dirname, "../../../.env");
+if (existsSync(rootEnv)) {
+  dotenv.config({ path: rootEnv });
+} else {
+  dotenv.config();
+}
+
 /**
  * proxy.ts — Decant Production Reverse Proxy & Gateway Entry Point.
  *
@@ -9,7 +19,10 @@ import "dotenv/config";
 import { DecantGatewayServer } from "./server.js";
 
 const PORT = parseInt(process.env["PORT"] ?? "8080", 10);
-const DB_PATH = process.env["DATABASE_PATH"] ?? "data/decant.db";
+const rawDbPath = process.env["DATABASE_PATH"] ?? "data/decant.db";
+const DB_PATH = isAbsolute(rawDbPath)
+  ? rawDbPath
+  : resolve(import.meta.dirname, "../../..", rawDbPath);
 
 const gateway = new DecantGatewayServer({
   port: PORT,

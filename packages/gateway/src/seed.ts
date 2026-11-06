@@ -1,3 +1,14 @@
+import { existsSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
+import dotenv from "dotenv";
+
+const rootEnv = resolve(import.meta.dirname, "../../../.env");
+if (existsSync(rootEnv)) {
+  dotenv.config({ path: rootEnv });
+} else {
+  dotenv.config();
+}
+
 /**
  * seed.ts — Seed the Decant SQLite database with sample demo records.
  *
@@ -11,7 +22,11 @@
 
 import { DecantLedger } from "./db.js";
 
-const dbPath = process.env["DATABASE_PATH"] ?? "data/decant.db";
+const rawDbPath = process.env["DATABASE_PATH"] ?? "data/decant.db";
+const dbPath = isAbsolute(rawDbPath)
+  ? rawDbPath
+  : resolve(import.meta.dirname, "../../..", rawDbPath);
+
 console.log(`[decant-seed] Seeding database at: ${dbPath}`);
 
 const ledger = new DecantLedger(dbPath);
