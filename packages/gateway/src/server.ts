@@ -3,14 +3,15 @@
  *
  * Implements a high-throughput, secure network gateway that manages:
  *   - Ed25519 Cryptographic Session Authentication
- *   - Anti-Hallucination Guardrails (Payload Caps & Token Bucket Rate Limiting)
+ *   - Request Limits (Payload Caps & Token Bucket Rate Limiting)
  *   - ACID Persistent Ledger Accounting (Node SQLite)
  *   - Real Multi-Provider AI Inference Routing with SSE Streaming
  *   - Intent Registry & Solver Fulfillment
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { PublicKey } from "near-api-js";
 import type { AddressInfo } from "node:net";
 import { DecantLedger } from "./db.js";
 import { DecantCrypto } from "./crypto.js";
@@ -92,8 +93,15 @@ export class DecantGatewayServer {
     const raw = await this.parseBody(req, maxBytes);
     if (!raw || !raw.trim()) return {};
     try {
-      return JSON.parse(raw);
-    } catch {
+      const value = JSON.parse(raw);
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        const error = new Error("Expected a JSON object");
+        (error as any).statusCode = 400;
+        throw error;
+      }
+      return value;
+    } catch (error: any) {
+      if (error.statusCode) throw error;
       const err = new Error("Malformed JSON payload");
       (err as any).statusCode = 400;
       throw err;
@@ -154,6 +162,9 @@ export class DecantGatewayServer {
           uptime: process.uptime(),
           ledger: "sqlite-acid-persistent",
           nearSync: "not-connected",
+          models: this.compute.models,
+          inferenceConfigured: this.compute.configured,
+          metering: "ceil(characters / 4), estimated credit units",
           timestamp: Date.now(),
         }, {}, req);
         return;
@@ -185,10 +196,9 @@ export class DecantGatewayServer {
           return;
         }
         if (!enforcePayloadSize(req, res)) return;
-        if (!enforceRateLimit(req, res)) return;
-
         const raw = await this.parseBody(req, 4 * 1024);
         if (!this.authorizeSession(req, res, sessionId, raw)) return;
+        if (!enforceRateLimit(req, res)) return;
         this.sendJson(res, 200, {
           echo: true,
           method: "POST",
@@ -205,6 +215,7 @@ export class DecantGatewayServer {
       const operatorRoute = pathname === "/v1/sessions/register"
         || pathname === "/v1/sessions"
         || pathname === "/v1/transactions"
+        || pathname === "/v1/reservations"
         || pathname === "/v1/intents"
         || pathname === "/v1/redemptions"
         || /^\/v1\/sessions\/[^/]+\/topup$/.test(pathname)
@@ -226,11 +237,17 @@ export class DecantGatewayServer {
         const body = await this.parseJsonBody(req);
         const { sessionId, publicKey, ownerAccountId, quota } = body;
 
-        if (!sessionId || !publicKey || !quota) {
+        if (!sessionId || !publicKey || !Number.isSafeInteger(quota) || quota <= 0) {
           this.sendJson(res, 400, { error: "Missing required fields: sessionId, publicKey, quota" }, {}, req);
           return;
         }
 
+        if (typeof sessionId !== "string" || sessionId.length > 128 || typeof publicKey !== "string"
+          || !publicKey.startsWith("ed25519:") || (ownerAccountId != null && typeof ownerAccountId !== "string")) {
+          this.sendJson(res, 400, { error: "Valid session ID, Ed25519 public key and owner metadata required" }, {}, req); return;
+        }
+        try { PublicKey.fromString(publicKey); }
+        catch { this.sendJson(res, 400, { error: "Invalid Ed25519 public key" }, {}, req); return; }
         try {
           const session = this.ledger.registerSession(sessionId, publicKey, ownerAccountId ?? "agent.testnet", quota);
           this.sendJson(res, 201, session, {}, req);
@@ -287,10 +304,18 @@ export class DecantGatewayServer {
         return;
       }
 
+      if (pathname === "/v1/reservations" && method === "GET") {
+        this.sendJson(res, 200, { reservations: this.ledger.listReservations() }, {}, req);
+        return;
+      }
+
       // ── Intent Registry ─────────────────────────────────────────────────────
       if (pathname === "/v1/intents/broadcast" && method === "POST") {
         const rawBody = await this.parseBody(req);
         const body = JSON.parse(rawBody || "{}");
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          this.sendJson(res, 400, { error: "Expected a JSON object" }, {}, req); return;
+        }
         const { sessionId, model, maxBudget } = body;
         if (!this.authorizeSession(req, res, sessionId, rawBody)) return;
 
@@ -317,7 +342,10 @@ export class DecantGatewayServer {
       if (/^\/v1\/intents\/[^/]+\/fill$/.test(pathname) && method === "POST") {
         const intentId = decodeURIComponent(pathname.split("/")[3]);
         const body = await this.parseJsonBody(req);
-        const solverId = body.solverId ?? "solver-default.near";
+        const solverId = body.solverId;
+        if (typeof solverId !== "string" || !solverId.trim() || solverId.length > 128) {
+          this.sendJson(res, 400, { error: "A solver ID is required" }, {}, req); return;
+        }
         try {
           const intent = this.ledger.fillIntent(intentId, solverId);
           // Assignment is not proof of completed compute; do not issue rewards here.
@@ -329,50 +357,31 @@ export class DecantGatewayServer {
       }
 
       // ── Solver Earnings & Compute-to-Value Redemption ───────────────────────
-      if (pathname.startsWith("/v1/solvers/") && pathname.endsWith("/earnings") && method === "GET") {
+      if (/^\/v1\/solvers\/[^/]+\/earnings$/.test(pathname) && method === "GET") {
         const solverId = decodeURIComponent(pathname.split("/")[3]);
         const earned = this.ledger.getSolverEarnings(solverId);
         this.sendJson(res, 200, {
           solverId,
           earnedCredits: earned,
-          usdtAmountCents: Math.floor(earned / 10),
-          usdtFormatted: (earned / 1000).toFixed(2),
-          rate: "1000 credits = $1.00 USDT",
+          ledger: "local",
+          payoutConnected: false,
         }, {}, req);
         return;
       }
 
-      if (pathname.startsWith("/v1/solvers/") && pathname.endsWith("/reward") && method === "POST") {
-        const solverId = decodeURIComponent(pathname.split("/")[3]);
-        const body = await this.parseJsonBody(req);
-        const amount = Number(body.amount ?? 100);
-        const newTotal = this.ledger.recordSolverEarnings(solverId, amount);
-        this.sendJson(res, 200, {
-          solverId,
-          earnedCredits: newTotal,
-          usdtFormatted: (newTotal / 1000).toFixed(2),
+      if (/^\/v1\/solvers\/[^/]+\/(reward|redeem)$/.test(pathname) && method === "POST") {
+        this.sendJson(res, 503, {
+          error: pathname.endsWith("/reward")
+            ? "Rewards are unavailable until completed work can be verified"
+            : "USDT payouts are not connected. No credits have been burned",
         }, {}, req);
-        return;
-      }
-
-      if (pathname.startsWith("/v1/solvers/") && pathname.endsWith("/redeem") && method === "POST") {
-        const solverId = decodeURIComponent(pathname.split("/")[3]);
-        const body = await this.parseJsonBody(req);
-        const credits = Number(body.credits ?? 0);
-        try {
-          const redemption = this.ledger.recordRedemption(solverId, credits);
-          this.sendJson(res, 200, {
-            success: true,
-            redemption,
-          }, {}, req);
-        } catch (err: any) {
-          this.sendJson(res, 400, { error: err.message }, {}, req);
-        }
         return;
       }
 
       if (pathname === "/v1/redemptions" && method === "GET") {
-        const redemptions = this.ledger.listRedemptions(50);
+        const redemptions = this.ledger.listRedemptions(50).map(record => ({
+          ...record, status: "Unverified", transferConfirmed: false,
+        }));
         this.sendJson(res, 200, { redemptions }, {}, req);
         return;
       }
@@ -386,122 +395,103 @@ export class DecantGatewayServer {
           return;
         }
 
-        // 2. Anti-Hallucination Policy Guards
+        // 2. Request Policy Guards
         if (!enforcePayloadSize(req, res)) return;
-        if (!enforceRateLimit(req, res)) return;
 
         const rawBody = await this.parseBody(req, 4 * 1024);
 
         if (!this.authorizeSession(req, res, sessionId, rawBody)) return;
+        if (!enforceRateLimit(req, res)) return;
 
-        // 4. On-Chain Ledger Quota Verification
-        const session = this.ledger.getSession(sessionId);
-        if (session && session.remainingQuota <= 0) {
-          this.sendJson(res, 402, {
-            error: "Payment Required — insufficient on-chain compute quota",
-            sessionId,
-            remaining: session.remainingQuota,
-          }, {}, req);
-          return;
+        const session = this.ledger.getSession(sessionId)!;
+        let payload: any;
+        try { payload = JSON.parse(rawBody || "{}"); }
+        catch { this.sendJson(res, 400, { error: "Malformed JSON payload" }, {}, req); return; }
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+          this.sendJson(res, 400, { error: "Expected an object payload" }, {}, req); return;
         }
-
-        // 5. Parse completion payload
-        let parsedPayload: any = {};
+        const messages = payload.messages ?? [{ role: "user", content: payload.prompt }];
+        const maxTokens = payload.max_tokens ?? 128;
+        const model = payload.model ?? this.compute.defaultModel;
+        if (!Array.isArray(messages) || messages.length === 0 || messages.length > 100
+          || !messages.every((m: any) => m && ["system", "user", "assistant"].includes(m.role)
+            && typeof m.content === "string" && m.content.length > 0)
+          || !Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > 4096
+          || typeof model !== "string" || model.length > 200) {
+          this.sendJson(res, 400, { error: "Valid messages, model and max_tokens (1–4096) are required" }, {}, req); return;
+        }
+        if (!this.compute.configured) {
+          this.sendJson(res, 503, { error: "A real inference provider and model must be configured" }, {}, req); return;
+        }
+        if (!this.compute.models.includes(model)) {
+          this.sendJson(res, 400, { error: "Requested model is not enabled on this gateway" }, {}, req); return;
+        }
+        const promptUnits = this.compute.promptUnits(messages);
+        const requestId = randomUUID();
+        try { this.ledger.reserveInference(requestId, sessionId, promptUnits + maxTokens); }
+        catch {
+          this.sendJson(res, 402, { error: "Payment Required — insufficient available compute credit",
+            required: promptUnits + maxTokens, remaining: session.remainingQuota }, {}, req); return;
+        }
+        const streaming = payload.stream !== false;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 120_000);
+        const onClose = () => { if (!res.writableFinished) controller.abort(); };
+        res.on("close", onClose);
+        let lastEvent: import("./compute-engine.js").StreamEvent | undefined;
+        let output = "";
+        let settled = false;
+        const settle = () => {
+          if (settled) return;
+          this.ledger.settleInference(requestId, lastEvent?.totalTokens ?? 0,
+            lastEvent?.promptTokens ?? 0, lastEvent?.completionTokens ?? 0,
+            lastEvent?.model ?? model, lastEvent?.latencyMs ?? 0);
+          settled = true;
+        };
         try {
-          parsedPayload = JSON.parse(rawBody || "{}");
-        } catch {
-          this.sendJson(res, 400, { error: "Malformed JSON payload" }, {}, req);
-          return;
-        }
-
-        const messages = parsedPayload.messages ?? [{ role: "user", content: parsedPayload.prompt ?? "Hello" }];
-        const model = parsedPayload.model ?? "meta-llama/Meta-Llama-3-8B-Instruct";
-        const isStreaming = parsedPayload.stream !== false;
-
-        // 6. Progressive SSE Stream
-        if (isStreaming) {
-          const cors = this.getCorsHeaders(req);
-          res.writeHead(200, {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            ...cors,
-            "X-Decant-Session": sessionId,
-            "X-Decant-Quota-Remaining": (session?.remainingQuota ?? 100).toString(),
-          });
-
-          let totalTokensUsed = 0;
-          let lastEvent: any = null;
-
-          try {
-            for await (const event of this.compute.streamChat({ messages, model, stream: true })) {
-              lastEvent = event;
-              if (event.token) {
-                const sseData = JSON.stringify({
-                  id: `chatcmpl-${Date.now()}`,
-                  object: "chat.completion.chunk",
-                  created: Math.floor(Date.now() / 1000),
-                  model: event.model,
-                  choices: [{ index: 0, delta: { content: event.token }, finish_reason: null }],
-                });
-                res.write(`data: ${sseData}\n\n`);
+          for await (const event of this.compute.streamChat({ messages, model, maxTokens,
+            stream: streaming, signal: controller.signal })) {
+            if (controller.signal.aborted) throw new Error("Inference request stopped");
+            lastEvent = event;
+            if (event.token) {
+              output += event.token;
+              if (streaming) {
+                if (!res.headersSent) res.writeHead(200, { ...this.getCorsHeaders(req),
+                  "Content-Type": "text/event-stream", "Cache-Control": "no-cache",
+                  "X-Decant-Session": sessionId,
+                  "X-Decant-Quota-Remaining": this.ledger.getSession(sessionId)!.remainingQuota.toString() });
+                res.write(`data: ${JSON.stringify({ id: requestId, object: "chat.completion.chunk",
+                  model: event.model, choices: [{ index: 0, delta: { content: event.token }, finish_reason: null }] })}\n\n`);
               }
-            }
-
-            res.write("data: [DONE]\n\n");
-            res.end();
-
-            // 7. Atomic On-Chain Settlement after completion
-            totalTokensUsed = lastEvent?.totalTokens ?? 1;
-            if (session) {
-              try {
-                this.ledger.deductQuota(
-                  sessionId,
-                  totalTokensUsed,
-                  lastEvent?.promptTokens ?? 0,
-                  lastEvent?.completionTokens ?? totalTokensUsed,
-                  model,
-                  lastEvent?.latencyMs ?? 50
-                );
-              } catch (err: any) {
-                console.warn(`[gateway] settlement debit note: ${err.message}`);
-              }
-            }
-          } catch (streamErr: any) {
-            if (!res.headersSent) {
-              this.sendJson(res, 502, { error: "Compute upstream failed", detail: streamErr.message }, {}, req);
             }
           }
-          return;
+          if (!lastEvent?.isComplete) throw new Error("Inference did not complete");
+          settle();
+          if (streaming) {
+            res.write(`data: ${JSON.stringify({ id: requestId, object: "chat.completion.chunk",
+              model: lastEvent.model, choices: [], usage: { credit_units: lastEvent.totalTokens,
+                metering: "ceil(characters / 4)" } })}\n\n`);
+            res.write("data: [DONE]\n\n"); res.end();
+          } else {
+            this.sendJson(res, 200, { id: requestId, object: "chat.completion", model: lastEvent.model,
+              choices: [{ index: 0, message: { role: "assistant", content: output }, finish_reason: "stop" }],
+              usage: { credit_units: lastEvent.totalTokens, metering: "ceil(characters / 4)" },
+            }, {}, req);
+          }
+        } catch (error: any) {
+          try { settle(); } catch {
+            if (res.headersSent) res.destroy();
+            else this.sendJson(res, 500, { error: "Settlement requires operator review", requestId }, {}, req);
+            return;
+          }
+          if (!res.destroyed) {
+            if (res.headersSent) { res.write(`data: ${JSON.stringify({ error: "Inference interrupted; partial usage settled" })}\n\n`); res.end(); }
+            else this.sendJson(res, 502, { error: "Compute upstream failed" }, {}, req);
+          }
+        } finally {
+          clearTimeout(timeout); controller.abort(); res.off("close", onClose);
+          // A failed settlement keeps the durable reservation for operator review.
         }
-
-        // Non-streaming fallback
-        let fullContent = "";
-        let lastEvent: any = null;
-        for await (const event of this.compute.streamChat({ messages, model, stream: false })) {
-          lastEvent = event;
-          if (event.token) fullContent += event.token;
-        }
-
-        const totalTokens = lastEvent?.totalTokens ?? 1;
-        if (session) {
-          this.ledger.deductQuota(
-            sessionId,
-            totalTokens,
-            lastEvent?.promptTokens ?? 0,
-            lastEvent?.completionTokens ?? totalTokens,
-            model,
-            lastEvent?.latencyMs ?? 50
-          );
-        }
-
-        this.sendJson(res, 200, {
-          id: `chatcmpl-${Date.now()}`,
-          object: "chat.completion",
-          model,
-          choices: [{ index: 0, message: { role: "assistant", content: fullContent }, finish_reason: "stop" }],
-          usage: { total_tokens: totalTokens },
-        }, {}, req);
         return;
       }
 

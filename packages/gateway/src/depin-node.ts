@@ -1,14 +1,4 @@
-/**
- * depin-node.ts — Web3 DePIN Compute Solver Node.
- *
- * Simulates a decentralized compute provider (such as Hyperbolic, Akash, or Livepeer)
- * serving Llama-3 inference via standard OpenAI-compatible Server-Sent Events (SSE)
- * over HTTP streaming sockets.
- *
- * When an external provider URL is configured via DEPIN_COMPUTE_URL, requests are
- * forwarded to that provider. Otherwise, it executes high-speed, token-by-token
- * streaming inference locally with realistic token latencies.
- */
+/** Local streaming TEST FIXTURE. It emits prepared text; it does not run a model or connect to a DePIN provider. */
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 
@@ -55,7 +45,7 @@ export class DePINComputeNode {
   private handleRequest(req: IncomingMessage, res: ServerResponse): void {
     if (req.method === "GET" && req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "healthy", model: this.model, provider: "DePIN-Akash-Hyperbolic" }));
+      res.end(JSON.stringify({ status: "healthy", model: this.model, provider: "local-test-fixture" }));
       return;
     }
 

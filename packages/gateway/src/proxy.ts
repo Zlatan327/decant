@@ -1,3 +1,4 @@
+import "dotenv/config";
 /**
  * proxy.ts — Decant Production Reverse Proxy & Gateway Entry Point.
  *
@@ -15,7 +16,7 @@ const gateway = new DecantGatewayServer({
   dbPath: DB_PATH,
 });
 
-gateway.start().catch((err) => {
+gateway.start(process.env["HOST"] ?? "127.0.0.1").catch((err) => {
   console.error("[gateway] startup error:", err);
   process.exit(1);
 });

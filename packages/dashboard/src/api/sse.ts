@@ -35,6 +35,7 @@ function parseChunk(data: string, onToken: (token: string) => void, onModel: (mo
   } catch {
     throw new ApiRequestError(502, '/v1/chat/completions', 'Gateway sent a malformed SSE data frame.');
   }
+  if (isRecord(parsed) && typeof parsed.error === 'string') throw new ApiRequestError(502, '/v1/chat/completions', parsed.error);
   if (!isRecord(parsed) || parsed.object !== 'chat.completion.chunk' || !Array.isArray(parsed.choices)) {
     throw new ApiRequestError(502, '/v1/chat/completions', 'Gateway sent a chunk outside the documented OpenAI-compatible SSE shape.');
   }
@@ -134,6 +135,7 @@ export async function streamChatCompletion(input: ChatStreamInput): Promise<Chat
     reader.releaseLock();
   }
 
+  if (!doneFrame) throw new ApiRequestError(502, path, 'Inference stream ended before completion.');
   return {
     quotaAtResponse: parseQuotaHeader(quotaHeader),
     quotaHeaderReadable: quotaHeader !== null,

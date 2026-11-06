@@ -80,6 +80,15 @@ export class DecantLedger {
     }
 
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS inference_reservations (
+        request_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        reserved_units INTEGER NOT NULL CHECK(reserved_units > 0),
+        used_units INTEGER,
+        status TEXT NOT NULL CHECK(status IN ('reserved', 'settled')),
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(session_id) REFERENCES sessions(session_id)
+      );
       CREATE TABLE IF NOT EXISTS used_signatures (
         signature TEXT PRIMARY KEY,
         expires_at INTEGER NOT NULL
@@ -170,7 +179,7 @@ export class DecantLedger {
     if (!publicKey || typeof publicKey !== "string" || !publicKey.trim()) {
       throw new Error("Invalid publicKey: must be a non-empty string.");
     }
-    if (!Number.isFinite(quota) || quota <= 0) {
+    if (!Number.isSafeInteger(quota) || quota <= 0) {
       throw new Error("Invalid quota: must be a positive number.");
     }
 
@@ -238,29 +247,30 @@ export class DecantLedger {
     model: string,
     latencyMs: number
   ): { remainingQuota: number; txId: string } {
-    if (!Number.isFinite(costUnits) || costUnits < 0) {
+    if (!Number.isSafeInteger(costUnits) || costUnits < 0) {
       throw new Error("Invalid costUnits: must be a non-negative number.");
     }
-
-    const session = this.getSession(sessionId);
-    if (!session) {
-      throw new Error(`Session '${sessionId}' not found.`);
-    }
-
-    if (session.remainingQuota < costUnits) {
-      throw new Error(
-        `Insufficient credit: remaining ${session.remainingQuota}, required ${costUnits}`
-      );
-    }
-
-    const newRemaining = session.remainingQuota - costUnits;
-    const newStatus = newRemaining === 0 ? "exhausted" : "active";
-    const now = Date.now();
-    const txId = `tx_${now}_${Math.random().toString(36).substring(2, 9)}`;
 
     // Atomic SQLite update transaction
     this.db.exec("BEGIN IMMEDIATE TRANSACTION;");
     try {
+      const session = this.getSession(sessionId);
+      if (!session) {
+        throw new Error(`Session '${sessionId}' not found.`);
+      }
+
+      if (session.remainingQuota < costUnits) {
+        throw new Error(
+          `Insufficient credit: remaining ${session.remainingQuota}, required ${costUnits}`
+        );
+      }
+
+      const newRemaining = session.remainingQuota - costUnits;
+      const newStatus = newRemaining === 0 ? "exhausted" : "active";
+      const now = Date.now();
+      const txId = `tx_${now}_${Math.random().toString(36).substring(2, 9)}`;
+
+
       this.db
         .prepare(`UPDATE sessions SET remaining_quota = ?, status = ? WHERE session_id = ?`)
         .run(newRemaining, newStatus, sessionId);
@@ -273,38 +283,87 @@ export class DecantLedger {
         .run(txId, sessionId, promptTokens, completionTokens, costUnits, model, latencyMs, now);
 
       this.db.exec("COMMIT;");
+      return { remainingQuota: newRemaining, txId };
     } catch (err) {
       this.db.exec("ROLLBACK;");
       throw err;
     }
+  }
 
-    return { remainingQuota: newRemaining, txId };
+  /** Deduct the full authorized ceiling before any upstream work can start. */
+  public reserveInference(requestId: string, sessionId: string, units: number): void {
+    if (!Number.isSafeInteger(units) || units < 1) throw new Error("Invalid reservation units");
+    this.db.exec("BEGIN IMMEDIATE TRANSACTION;");
+    try {
+      const result = this.db.prepare(`UPDATE sessions SET remaining_quota = remaining_quota - ?,
+        status = CASE WHEN remaining_quota - ? = 0 THEN 'exhausted' ELSE 'active' END
+        WHERE session_id = ? AND status != 'suspended' AND remaining_quota >= ?`)
+        .run(units, units, sessionId, units);
+      if (result.changes !== 1) throw new Error("Insufficient available credit for this request");
+      this.db.prepare(`INSERT INTO inference_reservations
+        (request_id, session_id, reserved_units, status, created_at) VALUES (?, ?, ?, 'reserved', ?)`)
+        .run(requestId, sessionId, units, Date.now());
+      this.db.exec("COMMIT;");
+    } catch (error) {
+      this.db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  /** Charge observed usage and refund unused credit atomically, once per request. */
+  public settleInference(requestId: string, usedUnits: number, promptUnits: number,
+    completionUnits: number, model: string, latencyMs: number): void {
+    if (!Number.isSafeInteger(usedUnits) || usedUnits < 0) throw new Error("Invalid usage units");
+    this.db.exec("BEGIN IMMEDIATE TRANSACTION;");
+    try {
+      const row = this.db.prepare("SELECT * FROM inference_reservations WHERE request_id = ?").get(requestId) as any;
+      if (!row) throw new Error("Reservation not found");
+      if (row.status === 'settled') throw new Error("Reservation already settled");
+      if (usedUnits > row.reserved_units) throw new Error("Usage exceeded reserved credit");
+      const refund = row.reserved_units - usedUnits;
+      this.db.prepare(`UPDATE sessions SET remaining_quota = remaining_quota + ?,
+        status = CASE WHEN status = 'suspended' THEN status WHEN remaining_quota + ? = 0 THEN 'exhausted' ELSE 'active' END
+        WHERE session_id = ?`).run(refund, refund, row.session_id);
+      this.db.prepare("UPDATE inference_reservations SET status = 'settled', used_units = ? WHERE request_id = ?")
+        .run(usedUnits, requestId);
+      if (usedUnits > 0) {
+        this.db.prepare(`INSERT INTO transactions
+          (tx_id, session_id, prompt_tokens, completion_tokens, cost_units, model, upstream_latency_ms, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(requestId, row.session_id, promptUnits, completionUnits, usedUnits, model, latencyMs, Date.now());
+      }
+      this.db.exec("COMMIT;");
+    } catch (error) {
+      this.db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  public listReservations(): unknown[] {
+    return this.db.prepare("SELECT * FROM inference_reservations WHERE status = 'reserved' ORDER BY created_at").all();
   }
 
   public topupQuota(sessionId: string, amount: number): SessionRecord {
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
       throw new Error("Invalid top-up amount: must be a positive number.");
     }
 
-    const session = this.getSession(sessionId);
-    if (!session) {
-      throw new Error(`Session '${sessionId}' not found.`);
+    const changed = this.db.prepare(`UPDATE sessions SET total_quota = total_quota + ?,
+      remaining_quota = remaining_quota + ?,
+      status = CASE WHEN status = 'suspended' THEN status ELSE 'active' END
+      WHERE session_id = ? AND total_quota <= ?`)
+      .run(amount, amount, sessionId, Number.MAX_SAFE_INTEGER - amount);
+    if (changed.changes !== 1) {
+      if (!this.getSession(sessionId)) throw new Error(`Session '${sessionId}' not found.`);
+      throw new Error("Quota exceeds safe integer range");
     }
-
-    const newTotal = session.totalQuota + amount;
-    const newRemaining = session.remainingQuota + amount;
-
-    this.db
-      .prepare(`UPDATE sessions SET total_quota = ?, remaining_quota = ?, status = 'active' WHERE session_id = ?`)
-      .run(newTotal, newRemaining, sessionId);
-
     return this.getSession(sessionId)!;
   }
 
   // ─── Intent Registry ──────────────────────────────────────────────────────
 
   public broadcastIntent(sessionId: string, model: string, maxBudget: number): IntentRecord {
-    if (!Number.isFinite(maxBudget) || maxBudget <= 0) {
+    if (!Number.isSafeInteger(maxBudget) || maxBudget <= 0) {
       throw new Error("Invalid maxBudget: must be a positive number.");
     }
 
@@ -386,13 +445,14 @@ export class DecantLedger {
     if (!solverId || typeof solverId !== "string" || !solverId.trim()) {
       throw new Error("Invalid solverId: must be a non-empty string.");
     }
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
       throw new Error("Invalid reward amount: must be a positive number.");
     }
 
     const cleanSolverId = solverId.trim();
     const current = this.getSolverEarnings(cleanSolverId);
     const newTotal = current + amount;
+    if (!Number.isSafeInteger(newTotal)) throw new Error("Reward exceeds safe integer range");
     const now = Date.now();
 
     this.db.prepare(`
@@ -410,59 +470,9 @@ export class DecantLedger {
     return row ? Number(row.earned_credits) : 0;
   }
 
-  public recordRedemption(accountId: string, credits: number): {
-    redemptionId: string;
-    accountId: string;
-    creditsBurned: number;
-    usdtAmountCents: number;
-    usdtAmountFormatted: string;
-    timestamp: number;
-    status: string;
-  } {
-    if (!accountId || typeof accountId !== "string" || !accountId.trim()) {
-      throw new Error("Invalid accountId: must be a non-empty string.");
-    }
-    if (!Number.isFinite(credits) || !Number.isInteger(credits) || credits < 100) {
-      throw new Error("Minimum redemption is 100 credits ($0.10 USDT)");
-    }
-
-    const cleanAccountId = accountId.trim();
-    const currentEarnings = this.getSolverEarnings(cleanAccountId);
-    if (currentEarnings < credits) {
-      throw new Error(`Insufficient earned credits: available ${currentEarnings}, requested ${credits}`);
-    }
-
-    const newBalance = currentEarnings - credits;
-    const now = Date.now();
-    const redemptionId = `rdm-${now}-${Math.random().toString(36).substring(2, 7)}`;
-    const usdtAmountCents = Math.floor(credits / 10); // 1,000 credits = $1.00 USDT = 100 cents
-
-    this.db.exec("BEGIN IMMEDIATE TRANSACTION;");
-    try {
-      this.db.prepare(`
-        UPDATE solver_earnings SET earned_credits = ?, updated_at = ? WHERE solver_id = ?
-      `).run(newBalance, now, cleanAccountId);
-
-      this.db.prepare(`
-        INSERT INTO redemptions (redemption_id, account_id, credits_burned, usdt_amount_cents, timestamp, status)
-        VALUES (?, ?, ?, ?, ?, 'Settled')
-      `).run(redemptionId, cleanAccountId, credits, usdtAmountCents, now);
-
-      this.db.exec("COMMIT;");
-    } catch (err) {
-      this.db.exec("ROLLBACK;");
-      throw err;
-    }
-
-    return {
-      redemptionId,
-      accountId: cleanAccountId,
-      creditsBurned: credits,
-      usdtAmountCents,
-      usdtAmountFormatted: (usdtAmountCents / 100).toFixed(2),
-      timestamp: now,
-      status: "Settled",
-    };
+  /** Retained as an explicit fail-closed boundary for older programmatic callers. */
+  public recordRedemption(_accountId: string, _credits: number): never {
+    throw new Error("USDT payouts are not connected; no credits have been burned");
   }
 
   public listRedemptions(limit: number = 20): any[] {

@@ -178,7 +178,7 @@ export function App() {
   const navDescriptions: Record<DashboardSection, string> = {
     overview: 'Executive gateway glance & live telemetry',
     guide: 'Architecture walkthrough & protocol guide',
-    value: 'USDT redemption & solver compute earnings',
+    value: 'Solver credit records; payouts unavailable',
     identity: 'Ed25519 session keys & credit balances',
     request: 'OpenAI-compatible SSE inference stream',
     routing: 'Intent marketplace & solver execution',
@@ -464,10 +464,10 @@ export function App() {
                   <div>
                     <div className="workspace-header__title">
                       <h2>Compute-to-Value Engine</h2>
-                      <span className="source-badge">NEAR ON-CHAIN SETTLEMENT</span>
+                      <span className="source-badge">LOCAL CREDIT RECORDS</span>
                     </div>
                     <p className="workspace-header__desc">
-                      Convert DePIN and solver compute earnings into spendable USDT value at fixed rate (1,000 credits = $1.00 USDT).
+                      View recorded solver credits. Verified rewards and USDT payouts are not connected yet.
                     </p>
                   </div>
                 </div>
@@ -541,6 +541,7 @@ export function App() {
                     stream={dashboard.state.stream}
                     now={now}
                     initialModel={selectedModel}
+                  models={dashboard.state.health.data?.models}
                     onSelectSession={dashboard.selectSession}
                     onRun={dashboard.runInference}
                   />
@@ -586,7 +587,7 @@ export function App() {
                       <span className="source-badge">SQLITE ACID LEDGER</span>
                     </div>
                     <p className="workspace-header__desc">
-                      Immutable record of prompt/completion tokens burned, upstream latency, and cost reconciliation.
+                      Gateway records of estimated input/output credit units, provider latency, and credit use.
                     </p>
                   </div>
                 </div>

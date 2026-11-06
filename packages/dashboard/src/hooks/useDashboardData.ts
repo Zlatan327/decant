@@ -425,7 +425,7 @@ export function useDashboardData(): DashboardController {
       });
       const headerLabel = result.quotaAtResponse === null
         ? 'not readable (missing or not exposed by cross-origin CORS)'
-        : `${result.quotaAtResponse} units before settlement`;
+        : `${result.quotaAtResponse} units after reservation`;
       dispatch({ type: 'console-event', event: makeEvent({ source: 'this-console', level: 'success', title: 'Inference stream completed', detail: `${result.responseModel ?? model} · ${completedAt - startedAt} ms round trip. Quota response header: ${headerLabel}.`, sessionId, httpStatus: 200 }) });
       void refresh();
     } catch (error) {

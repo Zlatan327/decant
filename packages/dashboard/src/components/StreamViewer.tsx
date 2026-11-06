@@ -4,14 +4,6 @@ import { formatDuration, formatNumber, isFallbackModel } from '../domain/format'
 import type { ApiResource, SessionRecord, StreamState } from '../domain/types';
 import { targetAttributes } from './targets';
 
-const supportedModels = [
-  'gemini-3.8-flash',
-  'meta-llama/Meta-Llama-3-8B-Instruct',
-  'llama-3.3-70b-versatile',
-  'claude-3-5-sonnet',
-  'gpt-4o',
-] as const;
-
 const PROMPT_CHIPS = [
   { label: '⚡ Decant routing', prompt: 'Explain the advantage of Decant credit routing' },
   { label: '⚛ Quantum physics', prompt: 'Summarize the principles of quantum superposition and entanglement in simple terms' },
@@ -25,17 +17,17 @@ interface StreamViewerProps {
   stream: StreamState;
   now: number;
   initialModel?: string;
+  models?: string[];
   onSelectSession: (sessionId: string) => void;
   onRun: (sessionId: string, model: string, prompt: string) => Promise<void>;
 }
 
-export function StreamViewer({ sessions, selectedSessionId, stream, now, initialModel, onSelectSession, onRun }: StreamViewerProps) {
-  const [model, setModel] = useState<string>(initialModel && supportedModels.includes(initialModel as any) ? initialModel : supportedModels[0]);
+export function StreamViewer({ sessions, selectedSessionId, stream, now, initialModel, models: supportedModels = [], onSelectSession, onRun }: StreamViewerProps) {
+  const [model, setModel] = useState<string>(initialModel && supportedModels.includes(initialModel) ? initialModel : supportedModels[0] ?? '');
+  const modelList = supportedModels.join('\n');
   useEffect(() => {
-    if (initialModel && supportedModels.includes(initialModel as any)) {
-      setModel(initialModel);
-    }
-  }, [initialModel]);
+    setModel(initialModel && supportedModels.includes(initialModel) ? initialModel : supportedModels[0] ?? '');
+  }, [initialModel, modelList]);
   const [prompt, setPrompt] = useState('Explain the advantage of Decant credit routing');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const active = stream.status === 'requesting' || stream.status === 'streaming';
@@ -45,7 +37,7 @@ export function StreamViewer({ sessions, selectedSessionId, stream, now, initial
     messages: [{ role: 'user', content: prompt }],
     stream: true,
   })).byteLength, [model, prompt]);
-  const blockedSession = !selected || selected.status !== 'active' || selected.remainingQuota <= 0;
+  const blockedSession = !model || !selected || selected.status !== 'active' || selected.remainingQuota <= 0;
   const actualModelLabel = stream.actualModel
     ? isFallbackModel(stream.actualModel)
       ? 'Gateway fallback · not Gemini'
@@ -58,7 +50,7 @@ export function StreamViewer({ sessions, selectedSessionId, stream, now, initial
     : (stream.completedAt ?? now) - stream.startedAt;
   const receivedCharacters = Array.from(stream.text).length;
   const quotaHeaderText = stream.quotaAtResponse !== null
-    ? `Response header ${formatNumber(stream.quotaAtResponse)} units (before settlement)`
+    ? `Response header ${formatNumber(stream.quotaAtResponse)} units (after credit reservation)`
     : stream.quotaHeaderReadable === false
       ? 'Quota header missing or not exposed by cross-origin CORS'
       : 'Quota response header —';
@@ -104,6 +96,7 @@ export function StreamViewer({ sessions, selectedSessionId, stream, now, initial
           {supportedModels.map((modelName) => <option key={modelName} value={modelName}>{modelName}</option>)}
         </select>
 
+        {supportedModels.length === 0 && <p className="field-note">No model is configured on this gateway. Ask the operator to connect a provider.</p>}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <label htmlFor="stream-prompt" style={{ margin: 0 }}>Prompt</label>
           <div className="prompt-suggestion-chips" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>

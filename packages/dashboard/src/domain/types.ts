@@ -4,6 +4,8 @@ export type ResourceStatus = 'idle' | 'loading' | 'ready' | 'stale' | 'unavailab
 export type DataScope = 'none' | 'global' | 'tracked' | 'per-session';
 
 export interface GatewayHealth {
+  models?: string[];
+  inferenceConfigured?: boolean;
   status: string;
   uptime: number;
   ledger: string;

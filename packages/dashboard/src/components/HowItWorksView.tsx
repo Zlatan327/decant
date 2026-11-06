@@ -13,8 +13,8 @@ export function HowItWorksView({ onNavigate }: HowItWorksViewProps) {
         <span className="guide-eyebrow mono">ARCHITECTURE &amp; SETTLEMENT PROTOCOL</span>
         <h1 className="guide-title">Protocol overview</h1>
         <p className="guide-lead">
-          A high-throughput intent-settlement gateway routing AI compute across open-weight models,
-          DePIN GPU nodes, and upstream APIs with atomic NEAR Protocol credit settlement.
+          Route AI requests through a configured provider and track credit use in the gateway ledger.
+          NEAR settlement and token payouts still need integration.
         </p>
       </div>
 
@@ -28,9 +28,8 @@ export function HowItWorksView({ onNavigate }: HowItWorksViewProps) {
           </div>
           <h2 className="guide-card__title">Cryptographic Session Keys</h2>
           <p className="guide-card__text">
-            Agents register an Ed25519 public key and obtain an allotted compute quota. Every incoming request
-            is cryptographically verified via <code className="mono">X-Decant-Signature</code>, strictly eliminating
-            replay attacks and unauthorized access.
+            An operator registers an agent public key and credit allowance. Agents sign requests with
+            their session key. This operator console uses the operator credential instead.
           </p>
           <div className="guide-card__code mono">
             <code>POST /v1/sessions/register</code>
@@ -53,8 +52,8 @@ export function HowItWorksView({ onNavigate }: HowItWorksViewProps) {
           </div>
           <h2 className="guide-card__title">Intent Broadcast &amp; Solver Matching</h2>
           <p className="guide-card__text">
-            Requesters broadcast compute intents specifying target models (e.g. Meta Llama 3, Gemini, Mistral) and token budgets.
-            Decentralized DePIN solvers claim open intents, fulfill workloads, and stream progressive SSE tokens back.
+            Agents can record compute requests and operators can assign a solver. Assignment does not prove
+            completion, run inference, or issue rewards. Verified solver execution is still needed.
           </p>
           <div className="guide-card__code mono">
             <code>POST /v1/intents/broadcast</code>
@@ -77,9 +76,8 @@ export function HowItWorksView({ onNavigate }: HowItWorksViewProps) {
           </div>
           <h2 className="guide-card__title">Real-Time Streaming &amp; ACID Ledger</h2>
           <p className="guide-card__text">
-            Inference streams through OpenAI-compatible SSE endpoints. Tokens stream in real time while usage
-            is atomically deducted from the persistent SQLite WAL ledger. If quota reaches zero, the HTTP 402 circuit breaker
-            instantly halts execution.
+            Credit is reserved before calling the provider. After the request ends, the gateway records estimated
+            usage and returns unused credit. Requests without enough available credit receive HTTP 402.
           </p>
           <div className="guide-card__code mono">
             <code>POST /v1/chat/completions</code>
@@ -102,20 +100,19 @@ export function HowItWorksView({ onNavigate }: HowItWorksViewProps) {
           </div>
           <h2 className="guide-card__title">Compute-to-Value Redemption (USDT)</h2>
           <p className="guide-card__text">
-            Solvers and GPU nodes earn compute credits for fulfilled workloads. Solvers burn earned credits on-chain
-            to redeem spendable <strong>USDT value</strong> at a deterministic rate of{' '}
-            <strong>1,000 Credits = $1.00 USDT ($0.001 per token)</strong>.
+            Solver credit records are local accounting entries. Rewards need verified completed work.
+            USDT payouts are unavailable until a funded token-transfer service is connected.
           </p>
           <div className="guide-card__code mono">
             <code>POST /v1/solvers/:id/redeem</code>
-            <span className="code-sub">&#123; "credits": 1000 &#125; &rarr; $1.00 USDT (Settled)</span>
+            <span className="code-sub">Unavailable — no credits are burned</span>
           </div>
           <button
             type="button"
             className="guide-card__action guide-card__action--primary"
             onClick={() => onNavigate('value')}
           >
-            Redeem Credits to USDT &rarr;
+            View Recorded Credits &rarr;
           </button>
         </div>
       </div>
@@ -124,11 +121,10 @@ export function HowItWorksView({ onNavigate }: HowItWorksViewProps) {
       <div className="guide-compliance-banner">
         <div className="guide-compliance-icon" aria-hidden="true">&#9670;</div>
         <div>
-          <h3 className="guide-compliance-title">100% Legitimate Architecture &amp; Compliance</h3>
+          <h3 className="guide-compliance-title">Provider access</h3>
           <p className="guide-compliance-text">
-            Decant routes compute exclusively across open-weight models (Llama 3, Mistral), DePIN GPU solver clusters,
-            and sanctioned upstream developer APIs. Decant strictly rejects gray-market scraping, credential reselling,
-            and ToS violations of consumer chat subscriptions.
+            Configure a provider endpoint and model that you are authorized to use. Provider keys stay on the gateway.
+            Provider failures return errors; there is no scripted answer fallback.
           </p>
         </div>
       </div>

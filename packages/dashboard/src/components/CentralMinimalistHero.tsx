@@ -81,7 +81,7 @@ export function CentralMinimalistHero({ onNavigate }: CentralMinimalistHeroProps
             <em>Credits, settled.</em>
           </h1>
           <p className="minimalist-hero__lead">
-            One gateway for AI inference, scoped compute credits, and auditable settlement on NEAR.
+            One gateway for AI inference, scoped compute credits, and clear usage records. NEAR settlement is being connected.
           </p>
         </div>
 

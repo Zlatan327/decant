@@ -49,6 +49,16 @@ describe("Gateway authorization regressions", () => {
     }
     assert.equal(gateway.ledger.getSolverEarnings("agent-a.testnet"), 0);
   });
+  it("validates registration and does not accept fabricated key strings", async () => {
+    const headers = { "X-Decant-Admin-Key": adminKey };
+    assert.equal((await post("/v1/sessions/register", { sessionId: "bad-key", publicKey: "ed25519:not-a-key", quota: 100 }, headers)).status, 400);
+    assert.equal((await post("/v1/sessions/register", null, headers)).status, 400);
+    assert.equal(gateway.ledger.getSession("bad-key"), null);
+    const client = new DecantClient({ sessionId: "registered-through-http" });
+    assert.equal((await post("/v1/sessions/register", { sessionId: client.sessionId, publicKey: client.publicKey, quota: 100 }, headers)).status, 201);
+    assert.equal((await post(`/v1/sessions/${client.sessionId}/topup`, { amount: 50 }, headers)).status, 200);
+    assert.equal(gateway.ledger.getSession(client.sessionId)!.remainingQuota, 150);
+  });
   it("allows signed session reads but rejects impersonation and tampering", async () => {
     assert.equal((await agent.request("/v1/sessions/agent-a")).status, 200);
     assert.equal((await other.request("/v1/sessions/agent-a")).status, 401);
@@ -87,6 +97,15 @@ describe("Gateway authorization regressions", () => {
     const intent = await response.json() as { intentId: string };
     assert.equal((await post(`/v1/intents/${intent.intentId}/fill`, { solverId: "solver.testnet" }, { "X-Decant-Admin-Key": adminKey })).status, 200);
     assert.equal(gateway.ledger.getSolverEarnings("solver.testnet"), 0);
+  });
+  it("does not mint rewards or burn credits through unconnected payout routes", async () => {
+    gateway.ledger.recordSolverEarnings("solver.testnet", 200);
+    for (const action of ["reward", "redeem"]) {
+      assert.equal((await post(`/v1/solvers/solver.testnet/${action}`, { amount: 500, credits: 100 },
+        { "X-Decant-Admin-Key": adminKey })).status, 503);
+    }
+    assert.equal(gateway.ledger.getSolverEarnings("solver.testnet"), 200);
+    assert.deepEqual(gateway.ledger.listRedemptions(), []);
   });
   it("reports disconnected chain state honestly", async () => {
     const res = await fetch(base + "/v1/health");

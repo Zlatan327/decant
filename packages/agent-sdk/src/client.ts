@@ -17,13 +17,18 @@ export interface DecantClientOptions {
   sessionId?: string;
   sessionKey?: string; // backwards compatibility
   enableCryptoSigning?: boolean;
+  model?: string;
+  maxOutputUnits?: number;
 }
 
 export interface StreamResponse {
+  /** Legacy name: number of received text chunks, not tokenizer usage. */
   tokens: number;
   tokenList: string[];
   fullText: string;
+  /** Deprecated: estimated credit units when reported, otherwise zero. */
   totalTokens: number;
+  creditUnits?: number;
   status: number;
   quotaRemaining?: number;
 }
@@ -34,7 +39,10 @@ export class DecantClient {
   public readonly sessionId: string;
   public readonly sessionKey: string;
   public readonly publicKey: string;
+  private lastTimestamp = 0;
   private enableSigning: boolean;
+  private model: string | undefined;
+  private maxOutputUnits: number;
 
   constructor(opts: DecantClientOptions = {}) {
     this.gatewayUrl = (opts.gatewayUrl ?? "http://localhost:8080").replace(/\/$/, "");
@@ -43,6 +51,8 @@ export class DecantClient {
     this.sessionId = opts.sessionId ?? opts.sessionKey ?? this.publicKey.replace("ed25519:", "").substring(0, 32);
     this.sessionKey = this.sessionId;
     this.enableSigning = opts.enableCryptoSigning ?? true;
+    this.model = opts.model;
+    this.maxOutputUnits = opts.maxOutputUnits ?? 128;
   }
 
   public static generateSessionKey(): string {
@@ -54,7 +64,8 @@ export class DecantClient {
     path: string,
     body: string = ""
   ): Record<string, string> {
-    const timestamp = Date.now();
+    const timestamp = Math.max(Date.now(), this.lastTimestamp + 1);
+    this.lastTimestamp = timestamp;
     const headers: Record<string, string> = {
       "X-Decant-Session": this.sessionId,
       "X-Decant-Public-Key": this.publicKey,
@@ -115,7 +126,8 @@ export class DecantClient {
   ): Promise<StreamResponse> {
     const path = "/v1/chat/completions";
     const payload = JSON.stringify({
-      model: "meta-llama/Meta-Llama-3-8B-Instruct",
+      model: this.model,
+      max_tokens: this.maxOutputUnits,
       messages: [{ role: "user", content: prompt }],
       prompt,
       stream: true,
@@ -147,6 +159,8 @@ export class DecantClient {
 
     const tokens: string[] = [];
     let fullText = "";
+    let completed = false;
+    let creditUnits: number | undefined;
 
     if (res.body) {
       const reader = res.body.getReader();
@@ -165,28 +179,33 @@ export class DecantClient {
           const trimmed = line.trim();
           if (!trimmed.startsWith("data:")) continue;
           const dataStr = trimmed.slice(5).trim();
-          if (dataStr === "[DONE]") continue;
+          if (dataStr === "[DONE]") { completed = true; continue; }
 
           try {
             const parsed = JSON.parse(dataStr);
+            if (parsed.error) throw new Error(String(parsed.error));
+            if (Number.isSafeInteger(parsed.usage?.credit_units)) creditUnits = parsed.usage.credit_units;
             const token = parsed.choices?.[0]?.delta?.content;
             if (token) {
               tokens.push(token);
               fullText += token;
               if (onToken) onToken(token);
             }
-          } catch {
-            // ignore
+          } catch (error) {
+            if (error instanceof SyntaxError) throw new Error("Malformed provider stream");
+            throw error;
           }
         }
       }
     }
 
+    if (!completed) throw new Error("Inference stream ended without completion confirmation");
     return {
       tokens: tokens.length,
       tokenList: tokens,
       fullText,
-      totalTokens: tokens.length,
+      totalTokens: creditUnits ?? 0,
+      creditUnits,
       status: 200,
       quotaRemaining,
     };

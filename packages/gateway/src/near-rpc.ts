@@ -79,6 +79,7 @@ export class NearRpcClient {
     const response = await fetch(this.config.rpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify(body),
     });
 
@@ -167,8 +168,7 @@ export class NearRpcClient {
   }
 
   /**
-   * Health check: verifies the RPC endpoint is reachable and the
-   * contract is deployed.
+   * Health check: verifies RPC status only. This does not verify a deployed contract.
    */
   async healthCheck(): Promise<boolean> {
     try {
@@ -181,9 +181,12 @@ export class NearRpcClient {
       const res = await fetch(this.config.rpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(5_000),
         body: JSON.stringify(body),
       });
-      return res.ok;
+      if (!res.ok) return false;
+      const data = await res.json() as { result?: { chain_id?: string }; error?: unknown };
+      return !data.error && typeof data.result?.chain_id === "string";
     } catch {
       return false;
     }

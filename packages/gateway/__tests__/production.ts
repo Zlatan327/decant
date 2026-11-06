@@ -1,283 +1,191 @@
-/**
- * production.ts — Production-Grade Integration Tests for Decant Backend.
- *
- * Verifies live bytes moving across real HTTP/network sockets against:
- *   1. Persistent SQLite ACID Ledger (atomic balance updates, audit trail).
- *   2. Cryptographic Ed25519 Signature Verification & Anti-Replay Protection.
- *   3. Real AI Compute Routing & Progressive SSE Token Streaming.
- *   4. Exhausted Credit Circuit Breaker (HTTP 402 lock).
- *   5. Decentralized Intent Registry Lifecycle (broadcast & solver fulfillment).
- */
-
-import { describe, it, before, after, beforeEach } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { createServer, type ServerResponse } from "node:http";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DecantGatewayServer } from "../src/server.js";
+import { DecantLedger } from "../src/db.js";
 import { DecantClient } from "../../agent-sdk/src/client.js";
-import { KeyPair, KeyPairEd25519 } from "near-api-js";
 import { resetBuckets } from "../src/policy.js";
 
-// Test-only operator credential for routes that mutate or list private ledger state.
-function operatorFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(input, { ...init, headers: { "X-Decant-Admin-Key": "test-operator-key", ...init.headers } });
-}
-
-describe("Decant Production Backend Suite", () => {
+// A controlled local HTTP provider is a TEST FIXTURE, not proof of real model inference.
+// It verifies provider transport, failure propagation and money invariants deterministically.
+describe("Gateway provider transport and credit accounting", () => {
   let gateway: DecantGatewayServer;
-  let gatewayPort: number;
-  let testClient: DecantClient;
-  const keyPair = KeyPair.fromRandom("ed25519") as KeyPairEd25519;
-
+  let base: string;
+  let providerCalls = 0;
+  let releaseProvider: (() => void) | undefined;
+  let providerClosed: (() => void) | undefined;
+  let providerClosePromise: Promise<void>;
+  const envNames = ["UPSTREAM_BASE_URL", "UPSTREAM_MODEL", "DECANT_MODEL", "GEMINI_API_KEY", "GEMINI_MODEL"];
+  const previous = new Map(envNames.map(k => [k, process.env[k]]));
+  const frame = (res: ServerResponse, text: string) => res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`);
+  const provider = createServer(async (req, res) => {
+    providerCalls++;
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw);
+    assert.ok(body.max_tokens > 0);
+    const prompt = body.messages[0].content;
+    if (prompt === "failure") { res.writeHead(503); res.end(); return; }
+    res.writeHead(200, { "Content-Type": "text/event-stream" });
+    if (prompt === "overflow") { frame(res, "x".repeat(1000)); res.end("data: [DONE]\n\n"); return; }
+    frame(res, "part");
+    if (prompt === "partial") { res.end(); return; }
+    if (prompt === "hold" || prompt === "cancel") {
+      await new Promise<void>(resolve => {
+        releaseProvider = resolve;
+        res.on("close", () => { providerClosed?.(); resolve(); });
+      });
+    }
+    if (!res.destroyed) { frame(res, " done"); res.end("data: [DONE]\n\n"); }
+  });
   before(async () => {
-    // Spin up production gateway with in-memory SQLite and crypto enforcement
-    gateway = new DecantGatewayServer({
-      port: 0,
-      dbPath: ":memory:",
-      adminKey: "test-operator-key",
-    });
-    gatewayPort = await gateway.start("127.0.0.1");
-
-    testClient = new DecantClient({
-      gatewayUrl: `http://127.0.0.1:${gatewayPort}`,
-      keyPair,
-      enableCryptoSigning: true,
-    });
+    for (const key of envNames) delete process.env[key];
+    await new Promise<void>(resolve => provider.listen(0, "127.0.0.1", resolve));
+    const port = (provider.address() as { port: number }).port;
+    process.env.UPSTREAM_BASE_URL = `http://127.0.0.1:${port}/v1`;
+    process.env.UPSTREAM_MODEL = "fixture-model";
+    gateway = new DecantGatewayServer({ port: 0, adminKey: "test-operator" });
+    base = `http://127.0.0.1:${await gateway.start()}`;
   });
-
   after(async () => {
+    releaseProvider?.();
     await gateway.stop();
+    provider.closeAllConnections();
+    await new Promise<void>(resolve => provider.close(() => resolve()));
+    for (const [key, value] of previous) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   });
-
-  beforeEach(() => {
+  beforeEach(() => resetBuckets());
+  let counter = 0;
+  const session = (quota = 1000) => {
+    const client = new DecantClient({ gatewayUrl: base, sessionId: `transport-${counter++}`, maxOutputUnits: 20 });
+    gateway.ledger.registerSession(client.sessionId, client.publicKey, "fixture.testnet", quota);
+    return client;
+  };
+  const chat = (id: string, prompt: string, extra: object = {}) => fetch(base + "/v1/chat/completions", {
+    method: "POST", headers: { "Content-Type": "application/json", "X-Decant-Admin-Key": "test-operator", "X-Decant-Session": id },
+    body: JSON.stringify({ prompt, max_tokens: 20, ...extra }),
+  });
+  it("reserves credit and settles streamed usage before DONE", async () => {
+    const client = session();
+    const response = await client.streamChat("hello");
+    assert.equal(response.fullText, "part done");
+    assert.equal(response.creditUnits, 6);
+    assert.equal(gateway.ledger.getSession(client.sessionId)!.remainingQuota, 994); // prompt 3 + completion 3
+    assert.equal(gateway.ledger.getTransactionHistory(client.sessionId)[0].costUnits, 6);
+    assert.deepEqual(gateway.ledger.listReservations(), []);
+  });
+  it("settles nonstreaming responses with explicitly estimated credit units", async () => {
+    const client = session();
+    const res = await chat(client.sessionId, "hello", { stream: false });
+    assert.equal(res.status, 200);
+    const data = await res.json() as any;
+    assert.equal(data.choices[0].message.content, "part done");
+    assert.equal(data.usage.credit_units, 6);
+    assert.equal(gateway.ledger.getSession(client.sessionId)!.remainingQuota, 994);
+  });
+  it("rejects a one-credit session before contacting the provider", async () => {
+    const client = session(1);
+    const calls = providerCalls;
+    assert.equal((await chat(client.sessionId, "hello")).status, 402);
+    assert.equal(providerCalls, calls);
+    assert.equal(gateway.ledger.getSession(client.sessionId)!.remainingQuota, 1);
+  });
+  it("blocks concurrent requests that would overspend reserved credit", async () => {
+    const client = session(30);
+    const first = await chat(client.sessionId, "hold");
+    assert.equal(first.status, 200);
+    assert.equal(gateway.ledger.getSession(client.sessionId)!.remainingQuota, 7);
+    assert.equal((await chat(client.sessionId, "hold")).status, 402);
+    releaseProvider!();
+    assert.ok((await first.text()).includes("[DONE]"));
+    assert.equal(gateway.ledger.getSession(client.sessionId)!.remainingQuota, 24);
+  });
+  it("refunds a failed provider call without manufacturing a response", async () => {
+    const client = session();
+    const response = await chat(client.sessionId, "failure");
+    assert.equal(response.status, 502);
+    assert.equal(gateway.ledger.getSession(client.sessionId)!.remainingQuota, 1000);
+    assert.deepEqual(gateway.ledger.listReservations(), []);
+  });
+  it("settles partial usage and reports truncated provider streams as errors", async () => {
+    const client = session();
+    const response = await chat(client.sessionId, "partial");
+    assert.equal(response.status, 200); // Headers precede the provider failure.
+    const body = await response.text();
+    assert.ok(body.includes('"error"'));
+    assert.ok(!body.includes("[DONE]"));
+    assert.equal(gateway.ledger.getSession(client.sessionId)!.remainingQuota, 995); // prompt 4 + completion 1
+    assert.deepEqual(gateway.ledger.listReservations(), []);
+  });
+  it("caps provider output at the reserved ceiling", async () => {
+    const client = session();
+    const res = await chat(client.sessionId, "overflow");
+    assert.equal(res.status, 502);
+    assert.equal(gateway.ledger.getSession(client.sessionId)!.remainingQuota, 1000);
+  });
+  it("cancels upstream work after client disconnect and releases unused credit", async () => {
+    const client = session();
+    providerClosePromise = new Promise(resolve => { providerClosed = resolve; });
+    const res = await chat(client.sessionId, "cancel");
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await Promise.race([providerClosePromise, new Promise((_, reject) => setTimeout(() => reject(new Error("Provider did not abort")), 2000).unref())]);
+    // Settlement and upstream closure occur in adjacent promise callbacks.
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(gateway.ledger.listReservations(), []);
+    assert.equal(gateway.ledger.getSession(client.sessionId)!.remainingQuota, 996);
+  });
+  it("rejects invalid units, unsupported models and chunked oversized bodies", async () => {
+    const client = session();
+    for (const max_tokens of [-1, 0, 1.5, "20", 5000]) {
+      resetBuckets(); assert.equal((await chat(client.sessionId, "hello", { max_tokens })).status, 400);
+    }
     resetBuckets();
+    assert.equal((await chat(client.sessionId, "hello", { model: "not-enabled" })).status, 400);
+    resetBuckets();
+    const res = await fetch(base + "/v1/chat/completions", {
+      method: "POST", headers: { "X-Decant-Admin-Key": "test-operator", "X-Decant-Session": client.sessionId },
+      body: new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("x".repeat(5000))); controller.close(); } }),
+      duplex: "half",
+    } as RequestInit);
+    assert.equal(res.status, 413);
   });
-
-  // ─── Test 1: Health & Diagnostics ─────────────────────────────────────────
-  it("GET /v1/health: reports healthy SQLite ledger and system status", async () => {
-    const res = await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/health`);
-    assert.equal(res.status, 200);
-    const json = await res.json() as any;
-    assert.equal(json.status, "healthy");
-    assert.equal(json.ledger, "sqlite-acid-persistent");
-    assert.ok(json.uptime >= 0);
+  it("returns unavailable when a real provider is not configured", async () => {
+    const old = process.env.UPSTREAM_BASE_URL;
+    delete process.env.UPSTREAM_BASE_URL;
+    const unconfigured = new DecantGatewayServer({ port: 0, adminKey: "test-operator" });
+    try {
+      unconfigured.ledger.registerSession("no-provider", "key", "fixture.testnet", 1000);
+      const port = await unconfigured.start();
+      const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+        method: "POST", headers: { "X-Decant-Admin-Key": "test-operator", "X-Decant-Session": "no-provider" },
+        body: JSON.stringify({ prompt: "hello" }),
+      });
+      assert.equal(res.status, 503);
+    } finally { await unconfigured.stop(); process.env.UPSTREAM_BASE_URL = old; }
   });
+});
 
-  // ─── Test 2: Session Registration & On-Chain Quota Delegation ─────────────
-  it("POST /v1/sessions/register: mints credit quota on persistent ledger", async () => {
-    const res = await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/sessions/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: testClient.sessionId,
-        publicKey: testClient.publicKey,
-        ownerAccountId: "agent.testnet",
-        quota: 150,
-      }),
-    });
-
-    assert.equal(res.status, 201);
-    const json = await res.json() as any;
-    assert.equal(json.sessionId, testClient.sessionId);
-    assert.equal(json.totalQuota, 150);
-    assert.equal(json.remainingQuota, 150);
-    assert.equal(json.status, "active");
-  });
-
-  // ─── Test 3: Ed25519 Cryptographic Verification ───────────────────────────
-  it("Security: blocks tampered payload with HTTP 403 Forbidden", async () => {
-    // Generate valid signature headers for an original payload
-    const headers = testClient.generateHeaders("POST", "/v1/chat/completions", JSON.stringify({ prompt: "valid" }));
-
-    // Tamper with the body on the wire
-    const res = await fetch(`http://127.0.0.1:${gatewayPort}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        ...headers,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ prompt: "TAMPERED_MALICIOUS_PAYLOAD" }),
-    });
-
-    assert.equal(res.status, 403, "Tampered payload must be rejected by Ed25519 verification");
-  });
-
-  it("Security: blocks duplicate signature replay attack with HTTP 403 Forbidden", async () => {
-    const payload = JSON.stringify({ prompt: "anti-replay-test", stream: false });
-    const headers = testClient.generateHeaders("POST", "/v1/chat/completions", payload);
-
-    // First request with valid signature passes
-    const res1 = await fetch(`http://127.0.0.1:${gatewayPort}/v1/chat/completions`, {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: payload,
-    });
-    assert.equal(res1.status, 200, "First signed request must succeed");
-
-    // Replaying the exact identical signature must be rejected
-    const res2 = await fetch(`http://127.0.0.1:${gatewayPort}/v1/chat/completions`, {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: payload,
-    });
-    assert.equal(res2.status, 403, "Replayed signature must be rejected by anti-replay cache");
-  });
-
-  it("Security: gracefully rejects malformed JSON payloads with HTTP 400 Bad Request", async () => {
-    const res = await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/sessions/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{ this is invalid json !!!",
-    });
-    assert.equal(res.status, 400);
-    const json = await res.json() as any;
-    assert.ok(json.error.includes("Malformed JSON"));
-  });
-
-  // ─── Test 4: Live AI Streaming Compute & Quota Deduction ──────────────────
-  it("POST /v1/chat/completions: streams real dynamic tokens and deducts ledger quota", async () => {
-    const tokensReceived: string[] = [];
-    const stream = await testClient.streamChat(
-      "Explain the advantage of Decant credit routing",
-      (token) => {
-        tokensReceived.push(token);
-      }
-    );
-
-    assert.equal(stream.status, 200);
-    assert.ok(tokensReceived.length > 5, "Must receive real progressive streaming tokens");
-    assert.ok(stream.fullText.includes("Decant"), "Dynamic response must address prompt topic");
-
-    // Check that ledger deducted tokens atomically
-    const sessionRes = await testClient.getSessionInfo();
-    assert.ok(sessionRes.session.remainingQuota < 150, "Quota must be deducted on-chain/ledger");
-    assert.ok(sessionRes.transactions.length >= 1, "Transaction audit trail must record token usage");
-    assert.equal(sessionRes.transactions[0].sessionId, testClient.sessionId);
-  });
-
-  // ─── Test 5: Intent Registry Lifecycle ────────────────────────────────────
-  it("Intent Lifecycle: broadcast intent and fulfill via solver", async () => {
-    // Broadcast
-    const intentRes = await testClient.broadcastIntent("meta-llama/Meta-Llama-3-8B-Instruct", 200);
-    assert.ok(intentRes.intentId.startsWith("intent_"));
-    assert.equal(intentRes.status, "open");
-
-    // List open intents
-    const listRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/intents`)).json() as any;
-    assert.ok(listRes.intents.some((i: any) => i.intentId === intentRes.intentId));
-
-    // Solver fills intent
-    const fillRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/intents/${intentRes.intentId}/fill`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ solverId: "hyperbolic-node-99.near" }),
-    })).json() as any;
-
-    assert.equal(fillRes.status, "filled");
-    assert.equal(fillRes.solverId, "hyperbolic-node-99.near");
-    assert.equal(gateway.ledger.getSolverEarnings("hyperbolic-node-99.near"), 0, "Assignment must not mint rewards");
-  });
-
-  // ─── Test 6: Circuit Breaker on Quota Exhaustion ──────────────────────────
-  it("Circuit Breaker: halts execution with HTTP 402 once credit quota is exhausted", async () => {
-    // Drain remaining balance directly
-    const session = gateway.ledger.getSession(testClient.sessionId)!;
-    gateway.ledger.deductQuota(
-      testClient.sessionId,
-      session.remainingQuota,
-      0,
-      session.remainingQuota,
-      "test-drain",
-      10
-    );
-
-    // Verify balance is 0
-    const emptySession = gateway.ledger.getSession(testClient.sessionId)!;
-    assert.equal(emptySession.remainingQuota, 0);
-
-    // Attempt inference
-    const res = await testClient.streamChat("Should fail due to zero credit balance");
-    assert.equal(res.status, 402, "Must return HTTP 402 Payment Required");
-    assert.ok(res.fullText.includes("insufficient on-chain compute quota"));
-  });
-
-  // ─── Test 7: Top-up Quota Re-enables Access ───────────────────────────────
-  it("Top-up: credit replenishment restores immediate agent access", async () => {
-    const topupRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/sessions/${testClient.sessionId}/topup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: 100 }),
-    })).json() as any;
-
-    assert.equal(topupRes.remainingQuota, 100);
-    assert.equal(topupRes.status, "active");
-
-    // Inference works again immediately
-    const res = await testClient.streamChat("Hello again after topup");
-    assert.equal(res.status, 200);
-    assert.ok(res.tokens > 0);
-  });
-
-  // ─── Test 8: Global Sessions List ─────────────────────────────────────────
-  it("GET /v1/sessions: lists all registered sessions from persistent ledger", async () => {
-    const res = await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/sessions`);
-    assert.equal(res.status, 200);
-    const json = await res.json() as any;
-    assert.ok(Array.isArray(json.sessions));
-    assert.ok(json.sessions.length > 0);
-    assert.equal(json.sessions[0].sessionId, testClient.sessionId);
-  });
-
-  // ─── Test 9: Global Transactions Audit ────────────────────────────────────
-  it("GET /v1/transactions: returns recent global transaction records", async () => {
-    const res = await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/transactions`);
-    assert.equal(res.status, 200);
-    const json = await res.json() as any;
-    assert.ok(Array.isArray(json.transactions));
-    assert.ok(json.transactions.length > 0);
-    assert.equal(json.transactions[0].sessionId, testClient.sessionId);
-  });
-
-  // ─── Test 10: Compute-to-Value Solver Earnings ─────────────────────────────
-  it("GET/POST /v1/solvers/:id/earnings: tracks compute workload credits", async () => {
-    const solverId = "node-alpha.near";
-    // Check initial
-    const initialRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/earnings`)).json() as any;
-    assert.equal(initialRes.earnedCredits, 0);
-
-    // Reward solver for compute execution
-    const rewardRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/reward`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: 1500 }),
-    })).json() as any;
-
-    assert.equal(rewardRes.earnedCredits, 1500);
-    assert.equal(rewardRes.usdtFormatted, "1.50");
-  });
-
-  // ─── Test 11: Compute-to-Value USDT Redemption ─────────────────────────────
-  it("POST /v1/solvers/:id/redeem: burns earned credits for spendable USDT", async () => {
-    const solverId = "node-alpha.near";
-    // Redeem 1000 credits for $1.00 USDT
-    const redeemRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/redeem`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ credits: 1000 }),
-    })).json() as any;
-
-    assert.equal(redeemRes.success, true);
-    assert.ok(redeemRes.redemption.redemptionId.startsWith("rdm-"));
-    assert.equal(redeemRes.redemption.creditsBurned, 1000);
-    assert.equal(redeemRes.redemption.usdtAmountFormatted, "1.00");
-    assert.equal(redeemRes.redemption.status, "Settled");
-
-    // Verify remaining balance
-    const checkRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/solvers/${solverId}/earnings`)).json() as any;
-    assert.equal(checkRes.earnedCredits, 500); // 1500 - 1000
-    assert.equal(checkRes.usdtFormatted, "0.50");
-
-    // Verify redemptions list
-    const listRes = await (await operatorFetch(`http://127.0.0.1:${gatewayPort}/v1/redemptions`)).json() as any;
-    assert.ok(Array.isArray(listRes.redemptions));
-    assert.ok(listRes.redemptions.some((r: any) => r.redemptionId === redeemRes.redemption.redemptionId));
-  });
+it("keeps reservations across restart, prevents double settlement and serializes separate ledger connections", () => {
+  const directory = mkdtempSync(join(tmpdir(), "decant-credit-"));
+  const file = join(directory, "ledger.db");
+  let first = new DecantLedger(file);
+  const second = new DecantLedger(file);
+  try {
+    first.registerSession("shared", "key", "fixture.testnet", 30);
+    first.reserveInference("request-1", "shared", 23);
+    assert.throws(() => second.reserveInference("request-2", "shared", 23), /Insufficient/);
+    first.close(); first = new DecantLedger(file);
+    assert.equal(first.getSession("shared")!.remainingQuota, 7);
+    assert.equal(first.listReservations().length, 1);
+    first.settleInference("request-1", 6, 3, 3, "fixture-model", 1);
+    assert.throws(() => second.settleInference("request-1", 6, 3, 3, "fixture-model", 1), /already settled/);
+    assert.equal(second.getSession("shared")!.remainingQuota, 24);
+    assert.throws(() => second.topupQuota("shared", 1.5), /Invalid/);
+    assert.throws(() => second.topupQuota("shared", Number.MAX_SAFE_INTEGER), /safe integer/);
+  } finally { first.close(); second.close(); rmSync(directory, { recursive: true, force: true }); }
 });

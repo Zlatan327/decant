@@ -24,7 +24,7 @@ import { NearRpcClient } from "../src/near-rpc.js";
 import { DecantClient } from "../../agent-sdk/src/client.js";
 import { enforceSession, enforceRateLimit, enforcePayloadSize } from "../src/policy.js";
 
-describe("Phase 4 — Production Upgrades & DePIN Handshake", () => {
+describe("Local legacy DePIN transport fixture", () => {
   let depinNode: DePINComputeNode;
   let depinPort: number;
   let sandboxServer: NearSandboxServer;
@@ -50,7 +50,7 @@ describe("Phase 4 — Production Upgrades & DePIN Handshake", () => {
       contractId: "decant.test.near",
     });
 
-    // 3. Launch Decant Gateway Proxy configured with on-chain auth & DePIN upstream
+    // 3. Launch Decant Gateway Proxy configured with in-memory fixture auth & DePIN upstream
     gatewayServer = createServer(async (clientReq: IncomingMessage, clientRes: ServerResponse) => {
       if (!enforceSession(clientReq, clientRes)) return;
 
@@ -60,13 +60,13 @@ describe("Phase 4 — Production Upgrades & DePIN Handshake", () => {
         const quota = await nearRpc.getQuota(sessionId);
         if (!quota) {
           clientRes.writeHead(401, { "Content-Type": "application/json" });
-          clientRes.end(JSON.stringify({ error: "Unauthorized — session not registered on-chain" }));
+          clientRes.end(JSON.stringify({ error: "Unauthorized — session not registered in-memory fixture" }));
           return;
         }
 
         if (quota.remaining <= 0) {
           clientRes.writeHead(402, { "Content-Type": "application/json" });
-          clientRes.end(JSON.stringify({ error: "Payment Required — insufficient on-chain quota" }));
+          clientRes.end(JSON.stringify({ error: "Payment Required — insufficient in-memory fixture quota" }));
           return;
         }
 
@@ -117,7 +117,7 @@ describe("Phase 4 — Production Upgrades & DePIN Handshake", () => {
   });
 
   // ── Test 1: Production Web3 Connectivity ──────────────────────────────────
-  it("NEAR Testnet production probe: connects to live blockchain", async () => {
+  it("NEAR Testnet RPC reachability (does not establish contract deployment)", { skip: process.env.NEAR_LIVE_PROBE !== "true" }, async () => {
     const testnetClient = new NearRpcClient({
       rpcUrl: "https://test.rpc.fastnear.com",
       contractId: "decant.testnet",
@@ -128,16 +128,16 @@ describe("Phase 4 — Production Upgrades & DePIN Handshake", () => {
   });
 
   // ── Test 2: DePIN Solver Health ──────────────────────────────────────────
-  it("DePIN compute solver is online and identifies as Llama-3 cluster", async () => {
+  it("Local streaming fixture reports its configured model", async () => {
     const res = await fetch(`http://127.0.0.1:${depinPort}/health`);
     assert.equal(res.status, 200);
     const json = await res.json() as { model: string; provider: string };
     assert.equal(json.model, "meta-llama/Meta-Llama-3-8B-Instruct");
-    assert.ok(json.provider.includes("DePIN"));
+    assert.equal(json.provider, "local-test-fixture");
   });
 
   // ── Test 3: Live Wire SSE Streaming Through Gateway ───────────────────────
-  it("HARD GATE: Agent streams Llama 3 inference through Gateway with progressive SSE chunks", async () => {
+  it("HARD GATE: Agent streams fixture text through local proxy with progressive SSE chunks", async () => {
     const sessionId = "agent-llama3-streamer";
     sandboxServer.registerSession(sessionId, 50, "agent.test.near");
 
@@ -165,7 +165,7 @@ describe("Phase 4 — Production Upgrades & DePIN Handshake", () => {
   it("HARD GATE: Exhausted quota immediately halts DePIN inference streaming with 402", async () => {
     const sessionId = "agent-llama3-streamer";
 
-    // Drain all 50 units on-chain
+    // Drain all 50 units in-memory fixture
     sandboxServer.consumeQuota(sessionId, 50);
 
     const client = new DecantClient({
@@ -175,6 +175,6 @@ describe("Phase 4 — Production Upgrades & DePIN Handshake", () => {
 
     const result = await client.streamChat("Another prompt after credit drain");
     assert.equal(result.status, 402, "Must reject with HTTP 402 Payment Required");
-    assert.ok(result.fullText.includes("insufficient on-chain quota"));
+    assert.ok(result.fullText.includes("insufficient in-memory fixture quota"));
   });
 });
