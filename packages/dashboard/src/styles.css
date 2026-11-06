@@ -3383,20 +3383,26 @@ textarea {
 
 .minimalist-hero {
   position: relative;
-  padding: 34px 0 4px;
-  overflow: hidden;
+  margin-top: -23px;
+  padding: 44px 0 10px;
+  overflow: visible;
   border-bottom: 0;
-  background: transparent;
+  background:
+    radial-gradient(ellipse 1100px 480px at 50% 0%, rgba(0, 236, 151, 0.11) 0%, rgba(0, 201, 167, 0.035) 48%, transparent 80%),
+    linear-gradient(180deg, rgba(0, 236, 151, 0.04) 0%, transparent 140px);
 }
 
 .minimalist-hero__glow {
-  top: -190px;
-  left: 29%;
-  width: 640px;
-  height: 330px;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: min(100%, 1100px);
+  height: 440px;
   transform: translateX(-50%);
-  background: radial-gradient(ellipse, rgba(0, 236, 151, 0.055), transparent 68%);
-  filter: blur(34px);
+  background: radial-gradient(ellipse 90% 70% at 50% 0%, rgba(0, 236, 151, 0.14) 0%, rgba(0, 201, 167, 0.05) 45%, transparent 75%);
+  filter: blur(48px);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .minimalist-hero__inner {
@@ -3421,17 +3427,19 @@ textarea {
 
 .minimalist-hero__eyebrow {
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(0, 236, 151, 0.14);
 }
 
 .minimalist-hero__eyebrow i,
 .minimalist-hero__section-label i {
-  color: #62cba0;
+  color: #00EC97;
   font-style: normal;
 }
 
 .minimalist-hero__eyebrow-index {
-  color: rgba(255, 255, 255, 0.31);
+  color: rgba(0, 236, 151, 0.65);
+  font-weight: 500;
+  letter-spacing: 0.08em;
   white-space: nowrap;
 }
 
@@ -3454,8 +3462,11 @@ textarea {
 }
 
 .minimalist-hero__headline em {
-  color: #86ddb7;
+  background: linear-gradient(135deg, #00EC97 0%, #55f3ba 55%, #a3f7d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   font-weight: 300;
+  display: inline-block;
 }
 
 .minimalist-hero__lead {
@@ -3986,7 +3997,7 @@ textarea {
 
 /* Light Theme Overrides */
 [data-theme="light"] .topbar {
-  border-bottom-color: rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(0, 135, 90, 0.12);
 }
 
 [data-theme="light"] .brand-mark {
@@ -4040,17 +4051,25 @@ textarea {
 
 [data-theme="light"] .minimalist-hero {
   background:
-    radial-gradient(ellipse at 50% 20%, rgba(0, 135, 90, 0.06), transparent 53%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.015), transparent 34%);
+    radial-gradient(ellipse 1100px 500px at 50% 0%, rgba(0, 236, 151, 0.22) 0%, rgba(0, 201, 167, 0.09) 45%, rgba(0, 236, 151, 0.015) 75%, transparent 100%),
+    linear-gradient(180deg, rgba(0, 236, 151, 0.08) 0%, rgba(0, 201, 167, 0.02) 80px, transparent 180px);
   border-bottom-color: rgba(0, 0, 0, 0.08);
 }
 
 [data-theme="light"] .minimalist-hero__glow {
-  background: radial-gradient(ellipse, rgba(0, 135, 90, 0.09) 0%, rgba(0, 135, 90, 0.015) 48%, transparent 74%);
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(100%, 1100px);
+  height: 440px;
+  background: radial-gradient(ellipse 85% 65% at 50% 0%, rgba(0, 236, 151, 0.25) 0%, rgba(0, 201, 167, 0.12) 42%, rgba(0, 236, 151, 0.02) 72%, transparent 95%);
+  filter: blur(52px);
+  opacity: 0.95;
 }
 
 [data-theme="light"] .minimalist-hero__eyebrow {
-  color: #64748b;
+  color: #475569;
+  border-bottom: 1px solid rgba(0, 135, 90, 0.18);
 }
 
 [data-theme="light"] .minimalist-hero__eyebrow i {
@@ -4058,7 +4077,9 @@ textarea {
 }
 
 [data-theme="light"] .minimalist-hero__eyebrow-index {
-  color: #94a3b8;
+  color: #00875a;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 [data-theme="light"] .minimalist-hero__headline {
@@ -4066,7 +4087,11 @@ textarea {
 }
 
 [data-theme="light"] .minimalist-hero__headline em {
-  color: #00875a;
+  background: linear-gradient(135deg, #00875a 0%, #00a86b 45%, #00c9a7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 400;
+  display: inline-block;
 }
 
 [data-theme="light"] .minimalist-hero__lead {
