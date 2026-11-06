@@ -11,7 +11,7 @@ export function HowItWorksView({ onNavigate }: HowItWorksViewProps) {
       {/* ── Editorial Header ── */}
       <div className="guide-hero">
         <span className="guide-eyebrow mono">ARCHITECTURE &amp; SETTLEMENT PROTOCOL</span>
-        <h1 className="guide-title">How Decant Works</h1>
+        <h1 className="guide-title">Protocol overview</h1>
         <p className="guide-lead">
           A high-throughput intent-settlement gateway routing AI compute across open-weight models,
           DePIN GPU nodes, and upstream APIs with atomic NEAR Protocol credit settlement.

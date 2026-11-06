@@ -75,7 +75,7 @@ export function App() {
     },
     {
       id: 'guide',
-      label: 'How It Works',
+      label: 'Protocol',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="9" />
@@ -86,7 +86,7 @@ export function App() {
     },
     {
       id: 'value',
-      label: 'Compute Value',
+      label: 'Value',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="9" />
@@ -96,7 +96,7 @@ export function App() {
     },
     {
       id: 'identity',
-      label: 'Sessions & Quotas',
+      label: 'Sessions',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" />
@@ -107,7 +107,7 @@ export function App() {
     },
     {
       id: 'request',
-      label: 'Inference Stream',
+      label: 'Inference',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="4 17 10 11 4 5" />
@@ -117,7 +117,7 @@ export function App() {
     },
     {
       id: 'routing',
-      label: 'Intent Marketplace',
+      label: 'Routing',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="6" cy="6" r="3" />
@@ -130,7 +130,7 @@ export function App() {
     },
     {
       id: 'accounting',
-      label: 'Transactions Ledger',
+      label: 'Ledger',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -142,7 +142,7 @@ export function App() {
     },
     {
       id: 'evidence',
-      label: 'Activity Feed',
+      label: 'Activity',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
@@ -182,7 +182,7 @@ export function App() {
             </span>
             <div className="mobile-drawer__brand-text">
               <span className="mobile-drawer__brand-title">DECANT</span>
-              <span className="mobile-drawer__brand-subtitle">GATEWAY / OPS</span>
+              <span className="mobile-drawer__brand-subtitle">PROTOCOL</span>
             </div>
           </div>
           <button
@@ -198,7 +198,7 @@ export function App() {
           </button>
         </div>
 
-        <div className="mobile-drawer__section-label mono">OPERATOR WORKSPACES</div>
+        <div className="mobile-drawer__section-label mono">WORKSPACES</div>
 
         <nav className="mobile-drawer__nav">
           {categories.map((cat) => {
@@ -238,7 +238,7 @@ export function App() {
             }}
             disabled={isRefreshing}
           >
-            {isRefreshing ? 'SYNCING...' : 'SYNC GATEWAY'}
+            {isRefreshing ? 'Refreshing…' : 'Refresh data'}
           </button>
         </div>
       </aside>
@@ -278,12 +278,11 @@ export function App() {
                   <DecantLogoMark size={20} />
                 </span>
                 <span className="brand-name">DECANT</span>
-                <span className="brand-divider" aria-hidden="true" />
-                <span className="brand-descriptor">GATEWAY</span>
+                <span className="brand-descriptor">PROTOCOL</span>
               </a>
             </div>
 
-            {/* ── Topbar Sign & Expandable Navigation Dock (Desktop) ── */}
+            {/* ── Primary workspace navigation ── */}
             <nav className="topbar-nav" aria-label="Sections">
               {categories.map((cat) => {
                 const isActive = activeSection === cat.id;
@@ -332,7 +331,7 @@ export function App() {
                 disabled={isRefreshing}
                 title="Refresh gateway state"
               >
-                {isRefreshing ? 'SYNCING...' : 'REFRESH'}
+                {isRefreshing ? 'Refreshing…' : 'Refresh'}
               </button>
             </div>
           </header>
@@ -356,15 +355,16 @@ export function App() {
                 />
 
                 <div className="overview-guide-prompt">
-                  <span className="overview-guide-prompt__text">
-                    New to Decant? Explore the decentralized compute routing and settlement protocol architecture
-                  </span>
+                  <div className="overview-guide-prompt__copy">
+                    <span className="overview-guide-prompt__label">PROTOCOL GUIDE</span>
+                    <span className="overview-guide-prompt__text">Architecture, settlement flow, and session security</span>
+                  </div>
                   <button
                     type="button"
                     className="overview-guide-prompt__btn"
                     onClick={() => setActiveSection('guide')}
                   >
-                    Read How It Works &rarr;
+                    Explore architecture <span aria-hidden="true">↗</span>
                   </button>
                 </div>
               </div>
