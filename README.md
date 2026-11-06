@@ -10,7 +10,7 @@ A high-speed, secure network routing gateway and accounting protocol that manage
 # 1. Install dependencies
 npm install
 
-# 2. Run all integration tests across all packages (34 tests across 5 test suites)
+# 2. Run all integration tests across all packages (36 tests across 5 test suites)
 npm test
 
 # 3. Start the production gateway server (port 8080)

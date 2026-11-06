@@ -95,6 +95,38 @@ describe("Decant Production Backend Suite", () => {
     assert.equal(res.status, 403, "Tampered payload must be rejected by Ed25519 verification");
   });
 
+  it("Security: blocks duplicate signature replay attack with HTTP 403 Forbidden", async () => {
+    const payload = JSON.stringify({ prompt: "anti-replay-test", stream: false });
+    const headers = testClient.generateHeaders("POST", "/v1/chat/completions", payload);
+
+    // First request with valid signature passes
+    const res1 = await fetch(`http://127.0.0.1:${gatewayPort}/v1/chat/completions`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: payload,
+    });
+    assert.equal(res1.status, 200, "First signed request must succeed");
+
+    // Replaying the exact identical signature must be rejected
+    const res2 = await fetch(`http://127.0.0.1:${gatewayPort}/v1/chat/completions`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: payload,
+    });
+    assert.equal(res2.status, 403, "Replayed signature must be rejected by anti-replay cache");
+  });
+
+  it("Security: gracefully rejects malformed JSON payloads with HTTP 400 Bad Request", async () => {
+    const res = await fetch(`http://127.0.0.1:${gatewayPort}/v1/sessions/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{ this is invalid json !!!",
+    });
+    assert.equal(res.status, 400);
+    const json = await res.json() as any;
+    assert.ok(json.error.includes("Malformed JSON"));
+  });
+
   // ─── Test 4: Live AI Streaming Compute & Quota Deduction ──────────────────
   it("POST /v1/chat/completions: streams real dynamic tokens and deducts ledger quota", async () => {
     const tokensReceived: string[] = [];

@@ -57,10 +57,6 @@ export class DecantComputeEngine {
       process.env["HYPERBOLIC_API_KEY"] ??
       null;
 
-    this.defaultModel =
-      process.env["DECANT_MODEL"] ??
-      (this.geminiClient ? "gemini-3.8-flash" : "meta-llama/Meta-Llama-3-8B-Instruct");
-
     const geminiKey = process.env["GEMINI_API_KEY"];
     if (geminiKey) {
       try {
@@ -69,6 +65,11 @@ export class DecantComputeEngine {
         this.geminiClient = null;
       }
     }
+
+    this.defaultModel =
+      process.env["DECANT_MODEL"] ??
+      process.env["GEMINI_MODEL"] ??
+      (this.geminiClient ? "gemini-3.8-flash" : "meta-llama/Meta-Llama-3-8B-Instruct");
   }
 
   /**

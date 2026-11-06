@@ -321,13 +321,33 @@ export function SessionPanel({
       <details className="disclosure" open={registerOpen} onToggle={(event) => setRegisterOpen(event.currentTarget.open)}>
         <summary data-render-target="toggle-session-registration" data-motion-trigger="interaction">Register a session</summary>
         <form className="form-stack" onSubmit={submitRegistration} {...targetAttributes('register-session-form', 'panel')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="field-note" style={{ margin: 0 }}>Register a new Ed25519 agent identity and credit quota</span>
+            <button
+              type="button"
+              className="button button--quiet button--small"
+              onClick={() => {
+                const chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+                let rand = '';
+                for (let i = 0; i < 43; i++) rand += chars.charAt(Math.floor(Math.random() * chars.length));
+                const newId = `agent-${rand.substring(0, 8).toLowerCase()}`;
+                setSessionId(newId);
+                setPublicKey(`ed25519:${rand}`);
+                setOwnerAccountId(`${newId}.testnet`);
+                setQuota('5000');
+              }}
+              title="Generate a valid random Ed25519 session ID and public key"
+            >
+              + Generate Random Identity
+            </button>
+          </div>
           <label htmlFor="register-session-id">Session ID</label>
-          <input id="register-session-id" type="text" value={sessionId} onChange={(event) => setSessionId(event.target.value)} autoComplete="off" required maxLength={200} data-render-target="register-session-id" data-motion-trigger="interaction" />
+          <input id="register-session-id" type="text" value={sessionId} onChange={(event) => setSessionId(event.target.value)} autoComplete="off" required maxLength={200} placeholder="e.g. agent-alpha" data-render-target="register-session-id" data-motion-trigger="interaction" />
           <label htmlFor="register-public-key">Agent public key</label>
-          <input id="register-public-key" type="text" value={publicKey} onChange={(event) => setPublicKey(event.target.value)} autoComplete="off" required maxLength={512} data-render-target="register-session-public-key" data-motion-trigger="interaction" />
+          <input id="register-public-key" type="text" value={publicKey} onChange={(event) => setPublicKey(event.target.value)} autoComplete="off" required maxLength={512} placeholder="ed25519:..." data-render-target="register-session-public-key" data-motion-trigger="interaction" />
           <p className="field-note">Only the public key is sent. This dashboard never asks for the agent's private signing key.</p>
           <label htmlFor="register-owner-id">Owner account ID <span className="muted">(optional)</span></label>
-          <input id="register-owner-id" type="text" value={ownerAccountId} onChange={(event) => setOwnerAccountId(event.target.value)} autoComplete="off" maxLength={200} data-render-target="register-session-owner" data-motion-trigger="interaction" />
+          <input id="register-owner-id" type="text" value={ownerAccountId} onChange={(event) => setOwnerAccountId(event.target.value)} autoComplete="off" maxLength={200} placeholder="e.g. agent.testnet" data-render-target="register-session-owner" data-motion-trigger="interaction" />
           <label htmlFor="register-quota">Initial quota units</label>
           <input id="register-quota" type="number" min="1" step="1" inputMode="numeric" value={quota} onChange={(event) => setQuota(event.target.value)} required data-render-target="register-session-quota" data-motion-trigger="interaction" />
           {registerError && <p className="inline-error" role="alert">{registerError}</p>}

@@ -34,6 +34,28 @@ export function TransactionAudit({ transactions }: TransactionAuditProps) {
     ? ' resource-message--warning'
     : '';
 
+  const exportJson = () => {
+    if (rows.length === 0) return;
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(rows, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute('href', dataStr);
+    dlAnchor.setAttribute('download', `decant-transactions-${Date.now()}.json`);
+    dlAnchor.click();
+  };
+
+  const exportCsv = () => {
+    if (rows.length === 0) return;
+    const header = 'txId,sessionId,model,promptTokens,completionTokens,costUnits,upstreamLatencyMs,timestamp,isoDateTime\n';
+    const csvRows = rows.map((r) =>
+      `"${r.txId}","${r.sessionId}","${r.model}",${r.promptTokens},${r.completionTokens},${r.costUnits},${r.upstreamLatencyMs},${r.timestamp},"${new Date(r.timestamp).toISOString()}"`
+    ).join('\n');
+    const dataStr = 'data:text/csv;charset=utf-8,' + encodeURIComponent(header + csvRows);
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute('href', dataStr);
+    dlAnchor.setAttribute('download', `decant-transactions-${Date.now()}.csv`);
+    dlAnchor.click();
+  };
+
   return (
     <section className="panel audit-panel" aria-labelledby="audit-heading" {...targetAttributes('credit-transaction-audit', 'panel')}>
       <div className="panel-heading">
@@ -41,22 +63,57 @@ export function TransactionAudit({ transactions }: TransactionAuditProps) {
           <p className="eyebrow">Accounting / reconciliation</p>
           <h2 id="audit-heading">Credit transaction audit</h2>
         </div>
-        <span className="source-badge">{scopeLabel}</span>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {rows.length > 0 && (
+            <>
+              <button
+                type="button"
+                className="button button--quiet button--small"
+                onClick={exportCsv}
+                title="Export all transactions to CSV spreadsheet"
+              >
+                Export CSV
+              </button>
+              <button
+                type="button"
+                className="button button--quiet button--small"
+                onClick={exportJson}
+                title="Export all transactions to JSON"
+              >
+                Export JSON
+              </button>
+            </>
+          )}
+          <span className="source-badge">{scopeLabel}</span>
+        </div>
       </div>
       {resourceMessage && <p className={`resource-message${messageTone}`} role={transactions.status === 'error' ? 'alert' : 'status'}>{resourceMessage}</p>}
       {rows.length > 0 && <p className="scope-note">Model is the value recorded by the gateway for the request; provider fallback is verified from the live SSE response, not inferred from this ledger field.</p>}
       {rows.length > 0 && (
         <div className="audit-controls" {...targetAttributes('transaction-audit-controls', 'panel')}>
           <label htmlFor="transaction-filter">Filter the current API snapshot</label>
-          <input
-            id="transaction-filter"
-            type="search"
-            value={filter}
-            onChange={(event) => { setFilter(event.target.value); setPage(0); }}
-            placeholder="Transaction, session, or model"
-            data-render-target="transaction-audit-filter"
-            data-motion-trigger="interaction"
-          />
+          <div style={{ display: 'flex', gap: '8px', flex: 1, alignItems: 'center' }}>
+            <input
+              id="transaction-filter"
+              type="search"
+              value={filter}
+              onChange={(event) => { setFilter(event.target.value); setPage(0); }}
+              placeholder="Transaction, session, or model"
+              data-render-target="transaction-audit-filter"
+              data-motion-trigger="interaction"
+              style={{ flex: 1 }}
+            />
+            {filter && (
+              <button
+                type="button"
+                className="button button--quiet button--small"
+                onClick={() => { setFilter(''); setPage(0); }}
+                title="Clear search filter"
+              >
+                Clear
+              </button>
+            )}
+          </div>
           <span className="audit-controls__count mono">{formatNumber(filteredRows.length)} matching / {formatNumber(rows.length)} returned</span>
         </div>
       )}

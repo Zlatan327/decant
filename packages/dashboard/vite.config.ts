@@ -9,9 +9,21 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 3000,
       strictPort: true,
-      allowedHosts: ['.manus.computer'],
+      allowedHosts: true,
       proxy: {
         '/v1': {
+          target: gatewayTarget,
+          changeOrigin: true,
+        },
+        '/health': {
+          target: gatewayTarget,
+          changeOrigin: true,
+        },
+        '/get': {
+          target: gatewayTarget,
+          changeOrigin: true,
+        },
+        '/post': {
           target: gatewayTarget,
           changeOrigin: true,
         },

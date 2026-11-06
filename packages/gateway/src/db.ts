@@ -153,9 +153,20 @@ export class DecantLedger {
     ownerAccountId: string,
     quota: number
   ): SessionRecord {
-    const existing = this.getSession(sessionId);
+    if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
+      throw new Error("Invalid sessionId: must be a non-empty string.");
+    }
+    if (!publicKey || typeof publicKey !== "string" || !publicKey.trim()) {
+      throw new Error("Invalid publicKey: must be a non-empty string.");
+    }
+    if (!Number.isFinite(quota) || quota <= 0) {
+      throw new Error("Invalid quota: must be a positive number.");
+    }
+
+    const cleanSessionId = sessionId.trim();
+    const existing = this.getSession(cleanSessionId);
     if (existing) {
-      throw new Error(`Session '${sessionId}' is already registered.`);
+      throw new Error(`Session '${cleanSessionId}' is already registered.`);
     }
 
     const now = Date.now();
@@ -164,11 +175,11 @@ export class DecantLedger {
       VALUES (?, ?, ?, ?, ?, ?, 'active')
     `);
 
-    stmt.run(sessionId, publicKey, ownerAccountId, quota, quota, now);
+    stmt.run(cleanSessionId, publicKey.trim(), (ownerAccountId || "agent.testnet").trim(), quota, quota, now);
     return {
-      sessionId,
-      publicKey,
-      ownerAccountId,
+      sessionId: cleanSessionId,
+      publicKey: publicKey.trim(),
+      ownerAccountId: (ownerAccountId || "agent.testnet").trim(),
       totalQuota: quota,
       remainingQuota: quota,
       createdAt: now,
@@ -216,6 +227,10 @@ export class DecantLedger {
     model: string,
     latencyMs: number
   ): { remainingQuota: number; txId: string } {
+    if (!Number.isFinite(costUnits) || costUnits < 0) {
+      throw new Error("Invalid costUnits: must be a non-negative number.");
+    }
+
     const session = this.getSession(sessionId);
     if (!session) {
       throw new Error(`Session '${sessionId}' not found.`);
@@ -256,6 +271,10 @@ export class DecantLedger {
   }
 
   public topupQuota(sessionId: string, amount: number): SessionRecord {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Invalid top-up amount: must be a positive number.");
+    }
+
     const session = this.getSession(sessionId);
     if (!session) {
       throw new Error(`Session '${sessionId}' not found.`);
@@ -274,9 +293,17 @@ export class DecantLedger {
   // ─── Intent Registry ──────────────────────────────────────────────────────
 
   public broadcastIntent(sessionId: string, model: string, maxBudget: number): IntentRecord {
+    if (!Number.isFinite(maxBudget) || maxBudget <= 0) {
+      throw new Error("Invalid maxBudget: must be a positive number.");
+    }
+
     const session = this.getSession(sessionId);
     if (!session) {
       throw new Error(`Session '${sessionId}' not found. Register first.`);
+    }
+
+    if (session.remainingQuota <= 0) {
+      throw new Error("Insufficient remaining quota to broadcast compute intent.");
     }
 
     const intentId = `intent_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -345,7 +372,15 @@ export class DecantLedger {
   // ─── Solver Earnings & Compute-to-Value Redemption ───────────────────────
 
   public recordSolverEarnings(solverId: string, amount: number): number {
-    const current = this.getSolverEarnings(solverId);
+    if (!solverId || typeof solverId !== "string" || !solverId.trim()) {
+      throw new Error("Invalid solverId: must be a non-empty string.");
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Invalid reward amount: must be a positive number.");
+    }
+
+    const cleanSolverId = solverId.trim();
+    const current = this.getSolverEarnings(cleanSolverId);
     const newTotal = current + amount;
     const now = Date.now();
 
@@ -353,13 +388,14 @@ export class DecantLedger {
       INSERT INTO solver_earnings (solver_id, earned_credits, updated_at)
       VALUES (?, ?, ?)
       ON CONFLICT(solver_id) DO UPDATE SET earned_credits = ?, updated_at = ?
-    `).run(solverId, newTotal, now, newTotal, now);
+    `).run(cleanSolverId, newTotal, now, newTotal, now);
 
     return newTotal;
   }
 
   public getSolverEarnings(solverId: string): number {
-    const row = this.db.prepare(`SELECT earned_credits FROM solver_earnings WHERE solver_id = ?`).get(solverId) as any;
+    const cleanSolverId = (solverId || "").trim();
+    const row = this.db.prepare(`SELECT earned_credits FROM solver_earnings WHERE solver_id = ?`).get(cleanSolverId) as any;
     return row ? Number(row.earned_credits) : 0;
   }
 
@@ -372,11 +408,15 @@ export class DecantLedger {
     timestamp: number;
     status: string;
   } {
-    if (credits < 100) {
+    if (!accountId || typeof accountId !== "string" || !accountId.trim()) {
+      throw new Error("Invalid accountId: must be a non-empty string.");
+    }
+    if (!Number.isFinite(credits) || !Number.isInteger(credits) || credits < 100) {
       throw new Error("Minimum redemption is 100 credits ($0.10 USDT)");
     }
 
-    const currentEarnings = this.getSolverEarnings(accountId);
+    const cleanAccountId = accountId.trim();
+    const currentEarnings = this.getSolverEarnings(cleanAccountId);
     if (currentEarnings < credits) {
       throw new Error(`Insufficient earned credits: available ${currentEarnings}, requested ${credits}`);
     }
@@ -390,12 +430,12 @@ export class DecantLedger {
     try {
       this.db.prepare(`
         UPDATE solver_earnings SET earned_credits = ?, updated_at = ? WHERE solver_id = ?
-      `).run(newBalance, now, accountId);
+      `).run(newBalance, now, cleanAccountId);
 
       this.db.prepare(`
         INSERT INTO redemptions (redemption_id, account_id, credits_burned, usdt_amount_cents, timestamp, status)
         VALUES (?, ?, ?, ?, ?, 'Settled')
-      `).run(redemptionId, accountId, credits, usdtAmountCents, now);
+      `).run(redemptionId, cleanAccountId, credits, usdtAmountCents, now);
 
       this.db.exec("COMMIT;");
     } catch (err) {
@@ -405,7 +445,7 @@ export class DecantLedger {
 
     return {
       redemptionId,
-      accountId,
+      accountId: cleanAccountId,
       creditsBurned: credits,
       usdtAmountCents,
       usdtAmountFormatted: (usdtAmountCents / 100).toFixed(2),

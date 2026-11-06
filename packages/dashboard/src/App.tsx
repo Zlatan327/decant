@@ -27,6 +27,7 @@ export function App() {
   const [activeSection, setActiveSection] = useState<DashboardSection>('overview');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -340,7 +341,12 @@ export function App() {
             {/* ── Section 1: Overview ── */}
             {activeSection === 'overview' && (
               <div className="workspace-view" key="overview">
-                <CentralMinimalistHero />
+                <CentralMinimalistHero
+                  onNavigate={(section, model) => {
+                    setActiveSection(section);
+                    if (model) setSelectedModel(model);
+                  }}
+                />
 
                 <HealthBar
                   resource={dashboard.state.health}
@@ -383,7 +389,7 @@ export function App() {
                     </p>
                   </div>
                 </div>
-                <ValueAccrualCard />
+                <ValueAccrualCard onSuccess={() => void dashboard.refresh()} />
                 <TransactionAudit transactions={dashboard.state.transactions} />
               </div>
             )}
@@ -452,6 +458,7 @@ export function App() {
                     selectedSessionId={dashboard.state.selectedSessionId}
                     stream={dashboard.state.stream}
                     now={now}
+                    initialModel={selectedModel}
                     onSelectSession={dashboard.selectSession}
                     onRun={dashboard.runInference}
                   />

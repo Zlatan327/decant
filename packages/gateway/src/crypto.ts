@@ -21,7 +21,36 @@ export interface SignedPayloadHeaders {
 
 const MAX_DRIFT_MS = 60_000; // 60 seconds maximum allowed clock drift
 
+// In-memory anti-replay cache: signatureHex -> timestamp received
+const seenSignatures = new Map<string, number>();
+
+/**
+ * Periodically purge stale entries from the anti-replay cache (older than MAX_DRIFT_MS * 2).
+ */
+function pruneStaleSignatures(): void {
+  const threshold = Date.now() - MAX_DRIFT_MS * 2;
+  for (const [sig, seenAt] of seenSignatures.entries()) {
+    if (seenAt < threshold) {
+      seenSignatures.delete(sig);
+    }
+  }
+}
+
+// Prune every 30 seconds if timer is not disabled
+let pruneTimer: NodeJS.Timeout | null = null;
+if (typeof setInterval !== "undefined") {
+  pruneTimer = setInterval(pruneStaleSignatures, 30_000);
+  if (pruneTimer.unref) pruneTimer.unref();
+}
+
 export class DecantCrypto {
+  /**
+   * Resets the anti-replay cache (useful in automated test suites).
+   */
+  public static resetReplayCache(): void {
+    seenSignatures.clear();
+  }
+
   /**
    * Generates a deterministic message hash for signature validation.
    */
@@ -37,7 +66,8 @@ export class DecantCrypto {
   }
 
   /**
-   * Mathematically verifies an Ed25519 signature against the registered public key.
+   * Mathematically verifies an Ed25519 signature against the registered public key,
+   * enforcing anti-replay window and replay prevention.
    *
    * @param publicKeyBase58 - Public key string, e.g. "ed25519:6E8..." or raw base58
    * @param signatureHex    - Hex-encoded Ed25519 signature
@@ -54,9 +84,19 @@ export class DecantCrypto {
     timestamp: number,
     body: string = ""
   ): boolean {
+    if (!signatureHex || typeof signatureHex !== "string") {
+      return false;
+    }
+
     const now = Date.now();
+    // Replay attack defense 1: timestamp must be within drift window
     if (Math.abs(now - timestamp) > MAX_DRIFT_MS) {
-      return false; // Replay attack or expired request
+      return false;
+    }
+
+    // Replay attack defense 2: duplicate signature replay prevention
+    if (seenSignatures.has(signatureHex)) {
+      return false; // Exact signature already processed
     }
 
     try {
@@ -67,8 +107,12 @@ export class DecantCrypto {
       const digest = this.createDigest(method, path, timestamp, body);
       const signatureBytes = Buffer.from(signatureHex, "hex");
 
-      return pubKey.verify(digest, signatureBytes);
-    } catch (err) {
+      const isValid = pubKey.verify(digest, signatureBytes);
+      if (isValid) {
+        seenSignatures.set(signatureHex, now);
+      }
+      return isValid;
+    } catch {
       return false;
     }
   }

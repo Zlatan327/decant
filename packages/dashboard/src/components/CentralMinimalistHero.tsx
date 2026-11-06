@@ -1,18 +1,16 @@
 import type { ReactNode } from 'react';
+import { siAnthropic, siGooglegemini, siMeta, siNear, type SimpleIcon } from 'simple-icons';
+import type { DashboardSection } from './SidebarNav';
 import { targetAttributes } from './targets';
 
 /**
  * CentralMinimalistHero — Minimalist gallery-grade hero showcase.
  *
- * Inspired by high-end design archives and editorial brand showcases:
- * - Pure pitch-black canvas
+ * Sourced from the editorial redesign:
+ * - Pure pitch-black canvas with ambient glow
  * - Monumental central emblem featuring DECANT and NEAR Protocol
- * - Ethereal airbrush neon green (#00EC97) spray/glow aura
- * - Editorial metadata on the left flank (Track 07, verification stamps, architecture)
- * - Framer-style squircle dock of upstream models and solver infrastructure
- *
- * Note: None of these are "partners" — they are upstream providers, solvers,
- * and settlement infrastructure.
+ * - Authentic vector provider marks (Simple Icons & OpenAI vector wordmark)
+ * - Interactive Framer-style squircle dock routing to each workspace section
  */
 
 interface SquircleTile {
@@ -21,6 +19,31 @@ interface SquircleTile {
   sublabel: string;
   icon: ReactNode;
   featured?: boolean;
+  brand?: boolean;
+}
+
+function brandMark(icon: SimpleIcon, color: string): ReactNode {
+  return (
+    <svg viewBox="0 0 24 24" role="img" aria-label={`${icon.title} logo`} xmlns="http://www.w3.org/2000/svg">
+      <path d={icon.path} fill={color} />
+    </svg>
+  );
+}
+
+const TILE_TARGETS: Record<string, { section: DashboardSection; model?: string }> = {
+  decant: { section: 'guide' },
+  near: { section: 'value' },
+  gemini: { section: 'request', model: 'gemini-3.8-flash' },
+  llama: { section: 'request', model: 'meta-llama/Meta-Llama-3-8B-Instruct' },
+  openai: { section: 'request' },
+  anthropic: { section: 'request' },
+  depin: { section: 'routing' },
+  sqlite: { section: 'accounting' },
+  ed25519: { section: 'identity' },
+};
+
+export interface CentralMinimalistHeroProps {
+  onNavigate?: (section: DashboardSection, model?: string) => void;
 }
 
 const TILES: SquircleTile[] = [
@@ -31,15 +54,9 @@ const TILES: SquircleTile[] = [
     featured: true,
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="sq-decant-g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#00EC97" />
-            <stop offset="100%" stopColor="#00C9A7" />
-          </linearGradient>
-        </defs>
-        <path d="M20 16 L20 48" stroke="url(#sq-decant-g)" strokeWidth="4.5" strokeLinecap="round" />
-        <path d="M20 16 L34 16 Q48 16 48 32 Q48 48 34 48 L20 48" stroke="url(#sq-decant-g)" strokeWidth="4.5" strokeLinecap="round" fill="none" />
-        <path d="M28 24 L38 32 L28 40" stroke="url(#sq-decant-g)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.6" />
+        <path d="M20 16 L20 48" stroke="#00EC97" strokeWidth="4.5" strokeLinecap="round" />
+        <path d="M20 16 L34 16 Q48 16 48 32 Q48 48 34 48 L20 48" stroke="#00EC97" strokeWidth="4.5" strokeLinecap="round" fill="none" />
+        <path d="M28 24 L38 32 L28 40" stroke="#00C9A7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
       </svg>
     ),
   },
@@ -48,103 +65,75 @@ const TILES: SquircleTile[] = [
     label: 'NEAR',
     sublabel: 'Settlement',
     featured: true,
-    icon: (
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path d="M21.443 0c-.89 0-1.714.46-2.18 1.218l-5.017 7.448a.533.533 0 0 0 .792.7l4.938-4.282a.2.2 0 0 1 .334.151v13.41a.2.2 0 0 1-.354.128L5.03.905A2.555 2.555 0 0 0 3.078 0h-.521A2.557 2.557 0 0 0 0 2.557v18.886a2.557 2.557 0 0 0 4.736 1.338l5.017-7.448a.533.533 0 0 0-.792-.7l-4.938 4.283a.2.2 0 0 1-.333-.152V5.352a.2.2 0 0 1 .354-.128l14.924 17.87c.486.574 1.2.905 1.952.906h.521A2.558 2.558 0 0 0 24 21.445V2.557A2.558 2.558 0 0 0 21.443 0Z" fill="#00EC97" />
-      </svg>
-    ),
+    icon: brandMark(siNear, '#00EC97'),
   },
   {
     id: 'gemini',
     label: 'Gemini',
-    sublabel: 'Upstream',
-    icon: (
-      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M32 8 C32 22 22 32 8 32 C22 32 32 42 32 56 C32 42 42 32 56 32 C42 32 32 22 32 8Z" fill="url(#gem-sq-grad)" />
-        <defs>
-          <linearGradient id="gem-sq-grad" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#4285F4" />
-            <stop offset="50%" stopColor="#9B72CB" />
-            <stop offset="100%" stopColor="#D96570" />
-          </linearGradient>
-        </defs>
-      </svg>
-    ),
+    sublabel: 'Google',
+    icon: brandMark(siGooglegemini, '#8E75B2'),
+    brand: true,
   },
   {
     id: 'llama',
-    label: 'Llama 3',
-    sublabel: 'Open-weights',
-    icon: (
-      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M22 14 C22 14 20 28 22 36 C24 44 30 48 38 48 L46 48" stroke="#A78BFA" strokeWidth="4" strokeLinecap="round" fill="none" />
-        <circle cx="24" cy="14" r="4" fill="#A78BFA" />
-        <path d="M22 26 C18 30 16 34 18 38" stroke="#A78BFA" strokeWidth="3" strokeLinecap="round" fill="none" opacity="0.5" />
-      </svg>
-    ),
+    label: 'Llama',
+    sublabel: 'Meta open-weight',
+    icon: brandMark(siMeta, '#4F9BFF'),
+    brand: true,
   },
   {
     id: 'openai',
     label: 'OpenAI',
-    sublabel: 'Upstream',
-    icon: (
-      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M32 12 L50 22 L50 42 L32 52 L14 42 L14 22 Z" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5" fill="none" />
-        <path d="M32 12 L32 32 M50 22 L32 32 M14 22 L32 32" stroke="rgba(255,255,255,0.4)" strokeWidth="2" fill="none" />
-        <circle cx="32" cy="32" r="4" fill="rgba(255,255,255,0.8)" />
-      </svg>
-    ),
+    sublabel: 'Model provider',
+    icon: <img src="/brand/openai-wordmark.svg" alt="" />,
+    brand: true,
   },
   {
     id: 'anthropic',
     label: 'Claude',
-    sublabel: 'Upstream',
-    icon: (
-      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M20 46 L32 16 L44 46" stroke="#D4A574" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-        <path d="M25 36 L39 36" stroke="#D4A574" strokeWidth="3" strokeLinecap="round" />
-      </svg>
-    ),
+    sublabel: 'Anthropic',
+    icon: brandMark(siAnthropic, '#D6B899'),
+    brand: true,
   },
   {
     id: 'depin',
     label: 'DePIN',
-    sublabel: 'Solver Net',
+    sublabel: 'Solver network',
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="32" cy="20" r="5" stroke="#22c55e" strokeWidth="2.5" fill="none" />
-        <circle cx="18" cy="44" r="5" stroke="#22c55e" strokeWidth="2.5" fill="none" />
-        <circle cx="46" cy="44" r="5" stroke="#22c55e" strokeWidth="2.5" fill="none" />
-        <path d="M32 25 L18 39 M32 25 L46 39 M18 44 L46 44" stroke="#22c55e" strokeWidth="1.5" opacity="0.5" />
+        <circle cx="32" cy="20" r="5" stroke="#72DDB1" strokeWidth="2.5" />
+        <circle cx="18" cy="44" r="5" stroke="#72DDB1" strokeWidth="2.5" />
+        <circle cx="46" cy="44" r="5" stroke="#72DDB1" strokeWidth="2.5" />
+        <path d="M32 25 L18 39 M32 25 L46 39 M18 44 L46 44" stroke="#72DDB1" strokeWidth="1.5" opacity="0.65" />
       </svg>
     ),
   },
   {
     id: 'sqlite',
     label: 'SQLite',
-    sublabel: 'ACID Ledger',
+    sublabel: 'ACID ledger',
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="32" cy="18" rx="16" ry="6" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" fill="none" />
-        <path d="M16 18 L16 46 C16 49.3 23.2 52 32 52 C40.8 52 48 49.3 48 46 L48 18" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" fill="none" />
-        <path d="M16 30 C16 33.3 23.2 36 32 36 C40.8 36 48 33.3 48 30" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" fill="none" />
+        <ellipse cx="32" cy="18" rx="16" ry="6" stroke="#AAB0B6" strokeWidth="2.5" />
+        <path d="M16 18 L16 46 C16 49.3 23.2 52 32 52 C40.8 52 48 49.3 48 46 L48 18" stroke="#AAB0B6" strokeWidth="2.5" />
+        <path d="M16 30 C16 33.3 23.2 36 32 36 C40.8 36 48 33.3 48 30" stroke="#AAB0B6" strokeWidth="1.5" opacity="0.65" />
       </svg>
     ),
   },
   {
     id: 'ed25519',
     label: 'Ed25519',
-    sublabel: 'Session Keys',
+    sublabel: 'Session keys',
     icon: (
       <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M32 10 L48 20 L48 36 C48 46 40 52 32 56 C24 52 16 46 16 36 L16 20 Z" stroke="#f59e0b" strokeWidth="2.5" fill="none" />
-        <path d="M28 32 L32 36 L40 26" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <path d="M32 10 L48 20 L48 36 C48 46 40 52 32 56 C24 52 16 46 16 36 L16 20 Z" stroke="#D4A85E" strokeWidth="2.5" />
+        <path d="M28 32 L32 36 L40 26" stroke="#D4A85E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
 ];
 
-export function CentralMinimalistHero() {
+export function CentralMinimalistHero({ onNavigate }: CentralMinimalistHeroProps = {}) {
   return (
     <section className="minimalist-hero" {...targetAttributes('decant-minimalist-hero', 'panel')}>
       {/* ── Background Ambient Glow ── */}
@@ -152,17 +141,22 @@ export function CentralMinimalistHero() {
 
       {/* ── Central Monument: DECANT × NEAR Glowing Insignia ── */}
       <div className="minimalist-hero__center">
-        <div className="monument-emblem" aria-label="DECANT and NEAR Protocol joint architectural insignia">
+        <div className="minimalist-hero__eyebrow">
+          <span className="minimalist-hero__eyebrow-mark" aria-hidden="true" />
+          <span>DECANT <i>/</i> COMPUTE ROUTING PROTOCOL</span>
+          <span className="minimalist-hero__eyebrow-index">NEAR ECOSYSTEM&nbsp; · &nbsp;01</span>
+        </div>
+
+        <div className="monument-emblem" aria-label="DECANT routing mark with NEAR Protocol">
           <svg
             className="monument-svg"
             viewBox="0 0 540 220"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
             role="img"
-            aria-label="DECANT and NEAR Protocol central glowing mark"
+            aria-label="DECANT and NEAR Protocol marks"
           >
             <defs>
-              {/* Luminous layered neon bloom without edge clipping */}
               <filter id="neon-glow" x="-40%" y="-40%" width="180%" height="180%">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur1" />
                 <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur2" />
@@ -172,109 +166,78 @@ export function CentralMinimalistHero() {
                   <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
-
-              {/* Pure NEAR green gradient */}
               <linearGradient id="near-mint-flow" x1="0" y1="0" x2="540" y2="220" gradientUnits="userSpaceOnUse">
                 <stop offset="0%" stopColor="#00EC97" />
-                <stop offset="45%" stopColor="#00F5A0" />
-                <stop offset="100%" stopColor="#00EC97" />
+                <stop offset="48%" stopColor="#78F2C3" />
+                <stop offset="100%" stopColor="#00C9A7" />
               </linearGradient>
             </defs>
-
-            {/* ── LEFT: DECANT Architectural Gateway Glyph ── */}
             <g
               transform="translate(40, 20) scale(2.8)"
-              style={{ filter: 'drop-shadow(0 0 14px rgba(0, 236, 151, 0.8)) drop-shadow(0 0 36px rgba(0, 236, 151, 0.4))' }}
+              style={{ filter: 'drop-shadow(0 0 14px rgba(0, 236, 151, 0.55)) drop-shadow(0 0 36px rgba(0, 236, 151, 0.25))' }}
             >
-              {/* Outer Crystalline D Backbone */}
-              <path
-                d="M14 10 L14 54"
-                stroke="url(#near-mint-flow)"
-                strokeWidth="5.5"
-                strokeLinecap="round"
-              />
-              <path
-                d="M14 10 L30 10 Q48 10 48 32 Q48 54 30 54 L14 54"
-                stroke="url(#near-mint-flow)"
-                strokeWidth="5.5"
-                strokeLinecap="round"
-                fill="none"
-              />
-              {/* Routing Funnel / Flow Chevron */}
-              <path
-                d="M23 20 L35 32 L23 44"
-                stroke="url(#near-mint-flow)"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-                opacity="0.9"
-              />
+              <path d="M14 10 L14 54" stroke="url(#near-mint-flow)" strokeWidth="5.5" strokeLinecap="round" />
+              <path d="M14 10 L30 10 Q48 10 48 32 Q48 54 30 54 L14 54" stroke="url(#near-mint-flow)" strokeWidth="5.5" strokeLinecap="round" fill="none" />
+              <path d="M23 20 L35 32 L23 44" stroke="url(#near-mint-flow)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             </g>
-
-            {/* ── CENTER: Intent Settlement Conduit ── */}
-            <g
-              transform="translate(225, 95)"
-              opacity="0.8"
-              style={{ filter: 'drop-shadow(0 0 10px rgba(0, 236, 151, 0.6))' }}
-            >
+            <g transform="translate(225, 95)" opacity="0.8">
               <circle cx="20" cy="15" r="4" fill="#00EC97" />
-              <path
-                d="M32 15 L58 15"
-                stroke="#00EC97"
-                strokeWidth="2.5"
-                strokeDasharray="4 4"
-                strokeLinecap="round"
-              />
+              <path d="M32 15 L58 15" stroke="#00EC97" strokeWidth="2.5" strokeDasharray="4 4" strokeLinecap="round" />
               <circle cx="70" cy="15" r="4" fill="#00EC97" />
             </g>
-
-            {/* ── RIGHT: Official NEAR Protocol Mark ── */}
             <g
               transform="translate(340, 26) scale(7.2)"
-              style={{ filter: 'drop-shadow(0 0 16px rgba(0, 236, 151, 0.85)) drop-shadow(0 0 42px rgba(0, 236, 151, 0.45))' }}
+              style={{ filter: 'drop-shadow(0 0 16px rgba(0, 236, 151, 0.58)) drop-shadow(0 0 42px rgba(0, 236, 151, 0.26))' }}
             >
-              <path
-                d="M21.443 0c-.89 0-1.714.46-2.18 1.218l-5.017 7.448a.533.533 0 0 0 .792.7l4.938-4.282a.2.2 0 0 1 .334.151v13.41a.2.2 0 0 1-.354.128L5.03.905A2.555 2.555 0 0 0 3.078 0h-.521A2.557 2.557 0 0 0 0 2.557v18.886a2.557 2.557 0 0 0 4.736 1.338l5.017-7.448a.533.533 0 0 0-.792-.7l-4.938 4.283a.2.2 0 0 1-.333-.152V5.352a.2.2 0 0 1 .354-.128l14.924 17.87c.486.574 1.2.905 1.952.906h.521A2.558 2.558 0 0 0 24 21.445V2.557A2.558 2.558 0 0 0 21.443 0Z"
-                fill="url(#near-mint-flow)"
-              />
+              <path d={siNear.path} fill="url(#near-mint-flow)" />
             </g>
           </svg>
         </div>
 
-        {/* ── Hero Headings ── */}
         <div className="minimalist-hero__copy">
           <h1 className="minimalist-hero__headline">
-            Route AI compute across
-            <br />
-            any model, any solver
+            Route any model.<br />
+            <em>Settle every credit.</em>
           </h1>
           <p className="minimalist-hero__lead">
-            Decentralized intent-settlement gateway powered by NEAR Protocol session keys,
-            persistent ACID credit accounting, and on-chain compute-to-USDT redemption.
+            A decentralized inference gateway with scoped session keys, an auditable compute-credit ledger, and settlement rails built on NEAR.
           </p>
         </div>
 
-        {/* ── Framer-Style Squircle Model & Solver Dock ── */}
+        <div className="squircle-dock__heading">
+          <span>THE ROUTING STACK</span>
+          <span>MODEL PROVIDERS <i>·</i> SETTLEMENT <i>·</i> INFRASTRUCTURE</span>
+        </div>
         <div
           className="squircle-dock"
           role="list"
-          aria-label="Supported settlement layer, upstream model providers, and solver infrastructure"
+          aria-label="Model providers, settlement layer, and gateway infrastructure"
         >
-          {TILES.map((tile) => (
-            <div
-              key={tile.id}
-              className={`squircle-tile ${tile.featured ? 'squircle-tile--featured' : ''}`}
-              role="listitem"
-              aria-label={`${tile.label} — ${tile.sublabel}`}
-              data-render-target={`squircle-tile-${tile.id}`}
-            >
-              <div className="squircle-tile__icon">{tile.icon}</div>
-              <span className="squircle-tile__label">{tile.label}</span>
-              <span className="squircle-tile__sublabel">{tile.sublabel}</span>
-            </div>
-          ))}
+          {TILES.map((tile) => {
+            const target = TILE_TARGETS[tile.id];
+            return (
+              <button
+                key={tile.id}
+                type="button"
+                className={`squircle-tile ${tile.featured ? 'squircle-tile--featured' : ''} ${tile.brand ? 'squircle-tile--brand' : ''}`}
+                onClick={() => target && onNavigate?.(target.section, target.model)}
+                role="listitem"
+                aria-label={`${tile.label} — ${tile.sublabel}. Click to open ${target ? target.section : 'workspace'}`}
+                title={`Explore ${tile.label} (${tile.sublabel})`}
+                data-render-target={`squircle-tile-${tile.id}`}
+              >
+                <div className={`squircle-tile__icon ${tile.id === 'openai' ? 'squircle-tile__icon--wordmark' : ''}`}>
+                  {tile.icon}
+                </div>
+                <span className="squircle-tile__label">{tile.label}</span>
+                <span className="squircle-tile__sublabel">{tile.sublabel}</span>
+              </button>
+            );
+          })}
         </div>
+        <p className="minimalist-hero__attribution">
+          Independent integrations · Provider names and marks belong to their respective owners.
+        </p>
       </div>
     </section>
   );

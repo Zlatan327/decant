@@ -1,23 +1,42 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MAX_REQUEST_BODY_BYTES } from '../domain/constants';
 import { formatDuration, formatNumber, isFallbackModel } from '../domain/format';
 import type { ApiResource, SessionRecord, StreamState } from '../domain/types';
 import { targetAttributes } from './targets';
 
-const supportedModels = ['gemini-3.8-flash', 'meta-llama/Meta-Llama-3-8B-Instruct'] as const;
+const supportedModels = [
+  'gemini-3.8-flash',
+  'meta-llama/Meta-Llama-3-8B-Instruct',
+  'llama-3.3-70b-versatile',
+  'claude-3-5-sonnet',
+  'gpt-4o',
+] as const;
+
+const PROMPT_CHIPS = [
+  { label: '⚡ Decant routing', prompt: 'Explain the advantage of Decant credit routing' },
+  { label: '⚛ Quantum physics', prompt: 'Summarize the principles of quantum superposition and entanglement in simple terms' },
+  { label: '🐍 Python quicksort', prompt: 'Write an idiomatic Python quicksort algorithm with comments' },
+  { label: '📊 DePIN sentiment', prompt: 'Analyze the sentiment and future growth trajectory of decentralized compute networks' },
+];
 
 interface StreamViewerProps {
   sessions: ApiResource<SessionRecord[]>;
   selectedSessionId: string | null;
   stream: StreamState;
   now: number;
+  initialModel?: string;
   onSelectSession: (sessionId: string) => void;
   onRun: (sessionId: string, model: string, prompt: string) => Promise<void>;
 }
 
-export function StreamViewer({ sessions, selectedSessionId, stream, now, onSelectSession, onRun }: StreamViewerProps) {
-  const [model, setModel] = useState<string>(supportedModels[0]);
-  const [prompt, setPrompt] = useState('');
+export function StreamViewer({ sessions, selectedSessionId, stream, now, initialModel, onSelectSession, onRun }: StreamViewerProps) {
+  const [model, setModel] = useState<string>(initialModel && supportedModels.includes(initialModel as any) ? initialModel : supportedModels[0]);
+  useEffect(() => {
+    if (initialModel && supportedModels.includes(initialModel as any)) {
+      setModel(initialModel);
+    }
+  }, [initialModel]);
+  const [prompt, setPrompt] = useState('Explain the advantage of Decant credit routing');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const active = stream.status === 'requesting' || stream.status === 'streaming';
   const selected = sessions.data?.find((session) => session.sessionId === selectedSessionId) ?? null;
@@ -85,7 +104,24 @@ export function StreamViewer({ sessions, selectedSessionId, stream, now, onSelec
           {supportedModels.map((modelName) => <option key={modelName} value={modelName}>{modelName}</option>)}
         </select>
 
-        <label htmlFor="stream-prompt">Prompt</label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <label htmlFor="stream-prompt" style={{ margin: 0 }}>Prompt</label>
+          <div className="prompt-suggestion-chips" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {PROMPT_CHIPS.map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                className="pill-btn"
+                style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px' }}
+                onClick={() => setPrompt(chip.prompt)}
+                disabled={active}
+                title={`Use prompt: "${chip.prompt}"`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <textarea
           id="stream-prompt"
           value={prompt}
