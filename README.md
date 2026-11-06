@@ -65,6 +65,133 @@ The Decant dashboard (`packages/dashboard`) is an operator console and live tele
 ### 7. Observed activity feed (Activity)
 - Real-time event stream logging gateway status codes (200, 401, 402, 403, 429), cryptographic verification checks, and provider interactions.
 
+## Agent integration and payment flow
+
+Decant is a two-sided compute gateway: human operators monitor telemetry and allocate allowances via the console, while autonomous AI agents consume compute, sign requests, and pay for inference programmatically.
+
+```
+┌─────────────────────────────────┐           ┌──────────────────────────────────────┐
+│  Side 1: Operator Console (UI)  │           │   Side 2: Autonomous Agents (API)    │
+│  - Real-time telemetry & health │           │  - Cryptographic Ed25519 identity    │
+│  - Session enrollment & top-ups │           │  - Real-time SSE token streaming     │
+│  - Stalled reservation recovery │           │  - Automated intent negotiation      │
+└────────────────┬────────────────┘           └──────────────────┬───────────────────┘
+                 │                                               │
+                 ▼                                               ▼
+         ┌──────────────────────────────────────────────────────────────┐
+         │             Decant Policy Gateway (Node 24 / SQLite)         │
+         │  - Enforces payload caps (<4KB) & token bucket rate limits   │
+         │  - Pre-reserves credit ceiling before upstream call          │
+         │  - Deducts observed characters; refunds unused balance       │
+         │  - Hard circuit-breaker lockout on quota exhaustion (402)    │
+         └──────────────────────────────┬───────────────────────────────┘
+                                        ▼
+                         [Configured AI Model Provider]
+```
+
+### 1. How autonomous agents authenticate (Ed25519 Request Signing)
+
+Agents do not rely on static API keys. Instead, every request is cryptographically signed using an Ed25519 keypair conforming to the NEAR protocol standard:
+
+1. The agent holds an Ed25519 private key.
+2. For each request, the agent constructs a canonical payload digest:
+   ```text
+   DIGEST = SHA256(METHOD:PATH:TIMESTAMP:SESSION_ID:SHA256(BODY))
+   ```
+3. The agent signs this digest and passes it in canonical headers:
+   * `X-Decant-Session`: The registered session identifier.
+   * `X-Decant-Public-Key`: The agent's Ed25519 public key.
+   * `X-Decant-Timestamp`: Monotonic millisecond timestamp (protects against replay attacks).
+   * `X-Decant-Signature`: Lowercase hexadecimal signature of the digest.
+
+#### TypeScript SDK Example (`@decant/agent-sdk`)
+
+```typescript
+import { DecantClient } from "@decant/agent-sdk";
+import { KeyPair, KeyPairEd25519 } from "near-api-js";
+
+// Initialize autonomous agent with an Ed25519 keypair
+const agentKeyPair = KeyPair.fromRandom("ed25519") as KeyPairEd25519;
+const agent = new DecantClient({
+  gatewayUrl: "http://127.0.0.1:8080",
+  keyPair: agentKeyPair,
+  enableCryptoSigning: true,
+  maxOutputUnits: 128,
+});
+
+// Stream real-time inference with progressive token callbacks
+const response = await agent.streamChat(
+  "Analyze market volatility and summarize risks in 3 bullet points",
+  (token) => process.stdout.write(token)
+);
+
+// Check remaining quota balance and execution audit
+const sessionInfo = await agent.getSessionInfo();
+console.log(`Remaining credit quota: ${sessionInfo.session.remainingQuota}`);
+```
+
+#### Raw HTTP / curl Example
+
+```bash
+# Example signed request header format:
+curl -X POST http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Decant-Session: agent-session-01" \
+  -H "X-Decant-Public-Key: ed25519:6E8s8...Wv" \
+  -H "X-Decant-Timestamp: 1730919600000" \
+  -H "X-Decant-Signature: 3a9f82c..." \
+  -d '{
+    "model": "gemini-3.5-flash",
+    "messages": [{"role": "user", "content": "Hello Decant"}],
+    "stream": true
+  }'
+```
+
+---
+
+### 2. How agents pay for compute (The 5-Stage Settlement Lifecycle)
+
+Decant treats compute access like an atomic credit ledger. Rather than invoicing post-facto or using floating provider token estimates, compute payment follows a strict 5-stage lifecycle:
+
+```
+[1. Quota Allotment] ──▶ [2. Pre-Reservation] ──▶ [3. Live Stream] ──▶ [4. Atomic Settlement] ──▶ [5. Circuit Breaker]
+  (Session Balance)        (Input + Ceiling)       (Zero Buffer)        (Debit Used, Refund)       (Locks Out at 0)
+```
+
+1. **Quota Allotment:**
+   * Each agent session is allocated a positive integer credit balance in SQLite, bound to its Ed25519 public key and an owner NEAR account (e.g., `agent.testnet`).
+2. **Atomic Upfront Credit Reservation:**
+   * Before opening a connection to the upstream model provider, the gateway calculates:
+     $$\text{Estimated Input Units} = \lceil \text{Input Characters} / 4 \rceil$$
+     $$\text{Reserved Ceiling} = \text{Estimated Input Units} + \text{max\_tokens}$$
+   * The gateway deducts this ceiling from the agent's available balance in an immediate SQLite transaction. Concurrent requests from the same agent cannot double-spend unreserved balance.
+3. **Real-Time Streaming & Zero-Buffering:**
+   * The gateway proxies SSE chunks from the provider with `Transfer-Encoding: chunked` directly to the client without buffering.
+4. **Final Settlement & Unused Credit Refund:**
+   * Upon stream completion, the gateway calculates the exact observed character units:
+     $$\text{Actual Usage} = \lceil \text{Prompt Chars} / 4 \rceil + \lceil \text{Generated Chars} / 4 \rceil$$
+   * In a single atomic transaction, the gateway records the final debit and immediately refunds the unused reservation back to the agent's available balance:
+     $$\text{Refund} = \text{Reserved Ceiling} - \text{Actual Usage}$$
+   * The final `[DONE]` frame is only sent to the agent after the ledger settlement transaction succeeds.
+5. **Circuit Breaker Lockout (`HTTP 402`):**
+   * If an agent exhausts its quota (remaining balance < reserved ceiling), the gateway terminates access and responds with `HTTP 402 Payment Required`. No calls reach the model provider.
+   * **Replenishment:** An operator can top up credits via the console/API (`POST /v1/sessions/:id/topup`), or through on-chain NEAR escrow deposits via the smart contract.
+
+---
+
+### 3. Decentralized Intent Broadcasting (Marketplace Routing)
+
+When autonomous agents need multi-provider routing or solver competition:
+1. **Broadcast Intent:** The agent posts a signed intent via `POST /v1/intents/broadcast`:
+   ```json
+   {
+     "model": "gemini-3.5-flash",
+     "maxBudget": 200,
+     "requirements": "Low latency streaming"
+   }
+   ```
+2. **Solver Matching:** DePIN compute nodes and solver networks inspect the open intent registry and submit a fill commitment.
+
 ## Request authorization
 
 - Health is public. Operator listings and management routes require `X-Decant-Admin-Key`. Missing operator configuration fails closed.
@@ -127,7 +254,3 @@ npm run build:contracts
 | `packages/agent-sdk` | Session identity, signing and streaming client |
 | `packages/contracts` | Rust NEAR ledger source; separate legacy in-memory RPC test fixture |
 | `packages/simulator` | Explicit local execution harness |
-
-## Independent hackathon participation
-
-Isaac (`0xaje`) assists with Decant's backend review and corrections and independently builds [Veyntro](https://github.com/0xaje/Veyntro). Decant and Veyntro are separate products with separate repositories and implementations. No Veyntro code is included in these corrections. This disclosure does not replace accurate contributor/team details in the submission.
