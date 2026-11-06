@@ -26,7 +26,7 @@
     "simulate": "npm run start --workspace=packages/simulator"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.5"

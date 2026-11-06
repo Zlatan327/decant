@@ -1,0 +1,29 @@
+name: Verify Decant
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  gateway-and-console:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build --workspace=packages/gateway
+      - run: npm run build --workspace=packages/agent-sdk
+      - run: npm run build:dashboard
+  rust-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo test --locked --manifest-path packages/contracts/Cargo.toml
+      - run: cargo build --locked --target wasm32-unknown-unknown --release --manifest-path packages/contracts/Cargo.toml

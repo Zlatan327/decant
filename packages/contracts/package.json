@@ -8,7 +8,8 @@
     "build": "cargo build --target wasm32-unknown-unknown --release",
     "test:cargo": "cargo test",
     "test:sandbox": "node --import tsx --test tests/sandbox.ts",
-    "test": "npm run test:sandbox"
+    "test": "npm run test:sandbox",
+    "test:unit": "cargo test"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

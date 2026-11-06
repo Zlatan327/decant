@@ -52,7 +52,7 @@ pub struct RedemptionRecord {
 
 /// The status of an intent in the registry.
 #[near(serializers = [json, borsh])]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum IntentStatus {
     /// Waiting for a solver to fill the request.
     Open,
@@ -104,6 +104,10 @@ pub struct DecantContract {
 
 #[near]
 impl DecantContract {
+    fn assert_owner(&self) {
+        assert!(env::predecessor_account_id() == self.owner, "Contract owner required");
+    }
+
     /// Initialize the contract. Called once at deployment.
     #[init]
     pub fn new(owner: AccountId) -> Self {
@@ -125,10 +129,12 @@ impl DecantContract {
 
     /// Register a new session with an allocated quota of compute tokens.
     ///
-    /// Only the contract owner (or the session owner themselves) can register.
-    /// In production this would require a deposit; for Phase 3 we allow free
-    /// registration for testing.
+    /// Only the operator/contract owner may allocate credits. Credits are accounting
+    /// units; this method does not represent a token deposit or collateral.
     pub fn register_session(&mut self, session_id: String, quota: u64) {
+        self.assert_owner();
+        assert!(!session_id.is_empty() && session_id.len() <= 128, "Invalid session ID");
+        assert!(quota > 0, "Quota must be positive");
         let caller = env::predecessor_account_id();
         assert!(
             self.quotas.get(&session_id).is_none(),
@@ -154,6 +160,8 @@ impl DecantContract {
     /// Called by the gateway after successfully proxying a request.
     /// Panics if the session doesn't exist or has insufficient balance.
     pub fn consume_quota(&mut self, session_id: String, amount: u64) {
+        self.assert_owner();
+        assert!(amount > 0, "Amount must be positive");
         let quota = self
             .quotas
             .get_mut(&session_id)
@@ -175,13 +183,17 @@ impl DecantContract {
 
     /// Top up a session's quota with additional compute tokens.
     pub fn topup_quota(&mut self, session_id: String, amount: u64) {
+        self.assert_owner();
+        assert!(amount > 0, "Amount must be positive");
         let quota = self
             .quotas
             .get_mut(&session_id)
             .expect("Session not found");
 
-        quota.remaining += amount;
-        quota.total += amount;
+        let remaining = quota.remaining.checked_add(amount).expect("Quota overflow");
+        let total = quota.total.checked_add(amount).expect("Quota overflow");
+        quota.remaining = remaining;
+        quota.total = total;
         env::log_str(&format!(
             "Session '{}': topped up {}, remaining {}",
             session_id, amount, quota.remaining
@@ -209,9 +221,11 @@ impl DecantContract {
             .get(&session_id)
             .expect("Session not found — register first");
 
+        assert!(env::predecessor_account_id() == quota.owner, "Session owner required");
         assert!(quota.remaining > 0, "No remaining quota to broadcast intent");
-
-        self.intent_counter += 1;
+        assert!(payload.len() <= 4096, "Intent payload too large");
+        assert!(self.open_intent_ids.len() < 1000, "Open intent limit reached");
+        self.intent_counter = self.intent_counter.checked_add(1).expect("Intent counter overflow");
         let intent_id = format!("intent-{}", self.intent_counter);
 
         let intent = Intent {
@@ -280,16 +294,11 @@ impl DecantContract {
     // Compute-to-Value & Redemption Engine
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Reward a compute solver or agent with earned credits for fulfilling compute work.
+    /// Disabled until a verifier can bind rewards to completed compute work.
     pub fn reward_solver(&mut self, solver_id: AccountId, amount: u64) -> u64 {
-        let current = self.earned_credits.get(&solver_id).copied().unwrap_or(0);
-        let new_total = current + amount;
-        self.earned_credits.insert(solver_id.clone(), new_total);
-        env::log_str(&format!(
-            "Solver '{}' rewarded {} credits. New balance: {}",
-            solver_id, amount, new_total
-        ));
-        new_total
+        self.assert_owner();
+        let _ = (solver_id, amount);
+        env::panic_str("Rewards unavailable: completed-work verification is not connected")
     }
 
     /// View method: get a solver or user's earned credit balance.
@@ -297,46 +306,11 @@ impl DecantContract {
         self.earned_credits.get(&account_id).copied().unwrap_or(0)
     }
 
-    /// Convert earned compute credits into spendable USDT value at fixed rate
-    /// (1,000 credits = $1.00 USDT = 100 cents).
-    /// Burns the credits on-chain and logs the settlement event for liquidity transfer.
+    /// A payout must not burn credits or claim settlement without a token transfer rail.
     pub fn redeem_to_usdt(&mut self, account_id: AccountId, credits: u64) -> RedemptionRecord {
-        assert!(credits >= 100, "Minimum redemption is 100 credits ($0.10 USDT)");
-        let current = self.earned_credits.get(&account_id).copied().unwrap_or(0);
-        assert!(
-            current >= credits,
-            "Insufficient earned credits to redeem: {} available, {} requested",
-            current,
-            credits
-        );
-
-        let new_balance = current - credits;
-        self.earned_credits.insert(account_id.clone(), new_balance);
-
-        self.redemption_counter += 1;
-        let redemption_id = format!("rdm-{}", self.redemption_counter);
-        let usdt_amount_cents = credits / 10;
-
-        let record = RedemptionRecord {
-            redemption_id: redemption_id.clone(),
-            account_id: account_id.clone(),
-            credits_burned: credits,
-            usdt_amount_cents,
-            timestamp: env::block_timestamp(),
-            status: "Settled".to_string(),
-        };
-
-        self.redemptions.insert(redemption_id.clone(), record.clone());
-        env::log_str(&format!(
-            "Redemption '{}': Account '{}' burned {} credits for ${:.2} USDT. Remaining: {}",
-            redemption_id,
-            account_id,
-            credits,
-            (usdt_amount_cents as f64) / 100.0,
-            new_balance
-        ));
-
-        record
+        assert!(env::predecessor_account_id() == account_id, "Account owner required");
+        let _ = credits;
+        env::panic_str("USDT payouts are not connected; no credits have been burned")
     }
 
     /// View method: retrieve a redemption audit record.
@@ -366,7 +340,7 @@ mod tests {
 
     #[test]
     fn test_register_and_get_quota() {
-        let context = get_context("alice.test.near");
+        let context = get_context("owner.test.near");
         testing_env!(context.build());
 
         let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
@@ -380,7 +354,7 @@ mod tests {
 
     #[test]
     fn test_consume_quota() {
-        let context = get_context("alice.test.near");
+        let context = get_context("owner.test.near");
         testing_env!(context.build());
 
         let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
@@ -394,7 +368,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Insufficient quota")]
     fn test_consume_quota_exceeds_balance() {
-        let context = get_context("alice.test.near");
+        let context = get_context("owner.test.near");
         testing_env!(context.build());
 
         let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
@@ -404,7 +378,7 @@ mod tests {
 
     #[test]
     fn test_topup_quota() {
-        let context = get_context("alice.test.near");
+        let context = get_context("owner.test.near");
         testing_env!(context.build());
 
         let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
@@ -419,7 +393,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Session already registered")]
     fn test_duplicate_session_registration() {
-        let context = get_context("alice.test.near");
+        let context = get_context("owner.test.near");
         testing_env!(context.build());
 
         let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
@@ -429,7 +403,7 @@ mod tests {
 
     #[test]
     fn test_broadcast_and_fill_intent() {
-        let context = get_context("alice.test.near");
+        let context = get_context("owner.test.near");
         testing_env!(context.build());
 
         let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
@@ -470,7 +444,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Session not found")]
     fn test_get_nonexistent_session() {
-        let context = get_context("alice.test.near");
+        let context = get_context("owner.test.near");
         testing_env!(context.build());
 
         let contract = DecantContract::new("owner.test.near".parse().unwrap());
@@ -479,7 +453,7 @@ mod tests {
 
     #[test]
     fn test_quota_decreases_after_multiple_consumptions() {
-        let context = get_context("alice.test.near");
+        let context = get_context("owner.test.near");
         testing_env!(context.build());
 
         let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
@@ -493,4 +467,56 @@ mod tests {
         assert_eq!(quota.remaining, 90);
         assert_eq!(quota.total, 100);
     }
+    #[test]
+    #[should_panic(expected = "Contract owner required")]
+    fn rejects_unauthorized_credit_creation() {
+        testing_env!(get_context("attacker.test.near").build());
+        let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
+        contract.register_session("victim".into(), 100);
+    }
+
+    #[test]
+    #[should_panic(expected = "Contract owner required")]
+    fn rejects_unauthorized_consumption() {
+        testing_env!(get_context("owner.test.near").build());
+        let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
+        contract.register_session("victim".into(), 100);
+        testing_env!(get_context("attacker.test.near").build());
+        contract.consume_quota("victim".into(), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Contract owner required")]
+    fn rejects_unauthorized_topup() {
+        testing_env!(get_context("owner.test.near").build());
+        let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
+        contract.register_session("victim".into(), 100);
+        testing_env!(get_context("attacker.test.near").build());
+        contract.topup_quota("victim".into(), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Contract owner required")]
+    fn rejects_unauthorized_rewards() {
+        testing_env!(get_context("attacker.test.near").build());
+        let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
+        contract.reward_solver("attacker.test.near".parse().unwrap(), 100);
+    }
+
+    #[test]
+    #[should_panic(expected = "Account owner required")]
+    fn rejects_unauthorized_redemption() {
+        testing_env!(get_context("attacker.test.near").build());
+        let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
+        contract.redeem_to_usdt("victim.test.near".parse().unwrap(), 100);
+    }
+
+    #[test]
+    #[should_panic(expected = "USDT payouts are not connected")]
+    fn rejects_unconnected_payout() {
+        testing_env!(get_context("owner.test.near").build());
+        let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
+        contract.redeem_to_usdt("owner.test.near".parse().unwrap(), 100);
+    }
+
 }

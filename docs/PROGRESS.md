@@ -1,26 +1,73 @@
 # Decant correction log
 
-Scope: repair the existing compute gateway and operator console. Keep its product purpose and visual design. No Veyntro implementation is used.
+Date: 2026-11-06. Baseline: `2fcc71a6d529c298d26e23a03623a581961db6f6` on `main`.
+Working branch: `fix/gateway-auth-credit-enforcement`.
 
-## 2026-11-06 — Authentication and ownership gate
+Scope: repair the existing compute gateway, operator console and contract. Keep the product purpose and visual design. No Veyntro implementation is used.
 
-Implemented:
-- Require signed requests bound to method, path, timestamp, session ID, and payload, or a valid operator key.
-- Reject unknown/suspended sessions even for operators.
-- Protect ledger listings and operator mutations; missing operator configuration fails closed.
-- Persist accepted signature fingerprints in SQLite to reject replay after restart.
-- Stop rewarding solvers merely for accepting an intent.
-- Add an operator-key input to the existing console; the key stays in memory, never in browser storage or a public build variable.
-- Report NEAR synchronization as not connected instead of asserting it is active.
+## Implemented and verified locally
 
-Verified: gateway TypeScript build and dashboard production build; 23 tests across the production backend and authorization regression suites. Existing production inference tests currently exercise the legacy scripted fallback; they do not establish real model execution. This is addressed in the next correction.
+### 1. Gateway authentication
 
-Remaining:
-1. Reserve credit before compute; settle usage and release reservations safely.
-2. Remove scripted successful inference and verify provider failure handling.
-3. Correct redemption UI and disable payout claims until an actual transfer rail exists.
-4. Harden the Rust contract and run its actual Rust tests.
-5. Deploy and wire NEAR settlement with account credentials and inspectable receipts.
-6. Implement rewards backed by verified work and real token payouts.
+- Require signed session requests or a valid operator credential. Bind signatures to method, route, timestamp, session and exact payload.
+- Reject unknown/suspended sessions even for operators. Validate Ed25519 registration keys.
+- Protect private listings and operator mutations. Missing operator configuration fails closed.
+- Persist accepted signature fingerprints in SQLite, rejecting replay after restart.
+- Support operator credentials in the existing console and shared API client without saving secrets in browser storage.
 
-Publishing: GitHub app branch creation returned HTTP 403 (integration has read access only). Git publishing is being checked separately. No remote changes have been confirmed.
+### 2. Credit enforcement and provider execution
+
+- Reserve maximum input/output credit atomically before starting provider work. Concurrent requests cannot spend the same available credit.
+- Settle observed usage once, refund unused allowance, and keep unresolved crash reservations deducted for operator review.
+- Abort upstream work on disconnect or timeout. Handle provider failure, missing completion markers, oversized output and chunked oversized input.
+- Send successful completion only after settlement succeeds. SDK and console reject incomplete/error streams.
+- Remove scripted fallback answers. Require an actual configured provider/model; model choices come from gateway configuration.
+- Meter estimated character-based credit units consistently instead of counting SSE chunks as tokens. This is not provider tokenizer billing or a currency balance.
+
+### 3. Honest reward/payout boundaries
+
+- Assigning an intent no longer issues rewards.
+- Disable reward minting and redemption endpoints until verified work and actual token transfers exist. No credit burn or fictitious payout success occurs.
+- Remove the simulated reward button and seeded earnings balance. Fetch balances through the authenticated configurable API client, and show fetch failures.
+- Label historical local redemptions unverified. Remove claims that local records prove NEAR/USDT settlement.
+- Health reports NEAR synchronization as not connected.
+
+### 4. Rust contract safeguards
+
+- Restrict quota creation, consumption and topup to the contract owner.
+- Restrict intent creation to the registered session owner; bound intent payload and open-intent growth.
+- Use checked quota/counter arithmetic.
+- Reject unauthorized rewards and disable reward issuance until completed-work verification exists.
+- Require the account owner for redemption and reject payouts before burning credits, because no token transfer rail exists.
+- Preserve the state fields and existing public JSON argument names. Source changes do not upgrade a deployed contract.
+
+### 5. Documentation and verification workflow
+
+- Document Node 24, operator credentials, provider configuration, signed-request changes and current feature boundaries.
+- Add `.env.example` without secrets and repair the actual Rust unit-test script.
+- Clearly identify legacy in-memory RPC and text-stream fixtures as test infrastructure.
+- Add GitHub Actions for JavaScript tests/builds, actual Rust tests and the WebAssembly build. It has not run on GitHub because publishing is blocked.
+- Add the Decant README disclosure naming Isaac's independent Veyntro participation. The reciprocal disclosure in Veyntro remains outside this task's scope.
+
+## Validation
+
+- JavaScript: 45 passed, 0 failed, 1 optional external NEAR RPC reachability probe skipped.
+- Gateway and agent SDK TypeScript builds: passed.
+- Dashboard production build: passed. Browser layout has not been visually exercised.
+- Actual Rust unit tests: 14 passed.
+- Rust release WebAssembly build: passed with `--locked`.
+- Live Gemini/OpenAI-compatible model execution: not verified; no user provider credential was supplied. The transport/accounting tests use a controlled local provider fixture and are not live-inference evidence.
+- NEAR deployment, chain reconciliation and token payout: not performed.
+
+## Remaining work — do not mark complete
+
+1. Connect and smoke-test the intended real model provider using server-side credentials.
+2. Implement verified solver execution/completion receipts. Intent assignment is still separate from inference; no intent budget escrow or reward verification exists.
+3. Integrate a deployed NEAR contract with signed writes, receipt checks and reconciliation. Current on-chain quota allocation is owner-managed; public wallet/session ownership enrollment is still needed for a broader agent flow.
+4. Implement a funded token payout rail with transfer confirmation, idempotency and failure recovery before enabling redemption.
+5. Implement reviewed crash-reservation recovery after reconciling provider usage; never automatically refund unknown work.
+6. Complete deployment/HTTPS/durable storage setup and browser verification.
+
+## Publishing blocker
+
+The GitHub app reports `push: false` for `Zlatan327/decant`. Creating the remote branch returned HTTP 403, `Resource not accessible by integration`. The Git transport also has no usable push credentials. No upstream branch, commit or pull request has been created. Local commits and an export preserve the work for review; publishing requires repository write access through the GitHub connection.

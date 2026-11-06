@@ -1,15 +1,4 @@
-/**
- * sandbox-server.ts — Deterministic NEAR Sandbox JSON-RPC 2.0 Server.
- *
- * Implements the exact NEAR JSON-RPC 2.0 wire protocol over HTTP for local development
- * and integration testing across platforms (Windows, Linux, macOS).
- *
- * Exposes:
- *   - POST / with JSON-RPC 2.0 payload
- *   - method: "status" (Node health check)
- *   - method: "query" with request_type: "call_function" (Deterministic view_method execution)
- *   - method: "broadcast_tx_commit" (On-chain state mutation: register, consume, topup, intent)
- */
+/** Legacy in-memory RPC TEST FIXTURE. Not a NEAR VM and does not execute the Rust contract. */
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 

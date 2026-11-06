@@ -8,9 +8,9 @@
  *   1. Gateway queries NEAR RPC via JSON-RPC 2.0 view_method to check active quotas.
  *   2. Rejects unregistered sessions with 401.
  *   3. Registers session on ledger with 100 compute units.
- *   4. Allows proxy routing and passes on-chain quota state in headers.
- *   5. Decrements quota on-chain and shuts down requests with 402 once exhausted.
- *   6. Verifies Intent Registry (broadcast_intent + fill_intent) on-chain.
+ *   4. Allows proxy routing and passes in-memory fixture quota state in headers.
+ *   5. Decrements quota in-memory fixture and shuts down requests with 402 once exhausted.
+ *   6. Verifies Intent Registry (broadcast_intent + fill_intent) in-memory fixture.
  */
 
 import { describe, it, before, after, beforeEach } from "node:test";
@@ -20,7 +20,7 @@ import { NearSandboxServer } from "../src/sandbox-server.js";
 import { NearRpcClient } from "../../gateway/src/near-rpc.js";
 import { enforceSession, enforceRateLimit, enforcePayloadSize, resetBuckets } from "../../gateway/src/policy.js";
 
-describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
+describe("Legacy in-memory RPC fixture (does not execute Rust)", () => {
   let sandboxServer: NearSandboxServer;
   let sandboxPort: number;
   let echoServer: Server;
@@ -48,7 +48,7 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
       contractId: "decant.test.near",
     });
 
-    // 4. Launch Gateway with NEAR on-chain authentication enabled
+    // 4. Launch Gateway with NEAR in-memory fixture authentication enabled
     gatewayServer = createServer(async (clientReq: IncomingMessage, clientRes: ServerResponse) => {
       if (!enforceSession(clientReq, clientRes)) return;
 
@@ -58,17 +58,17 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
         const quota = await nearRpc.getQuota(sessionId);
         if (!quota) {
           clientRes.writeHead(401, { "Content-Type": "application/json" });
-          clientRes.end(JSON.stringify({ error: "Unauthorized — session not registered on-chain" }));
+          clientRes.end(JSON.stringify({ error: "Unauthorized — session not registered in-memory fixture" }));
           return;
         }
 
         if (quota.remaining <= 0) {
           clientRes.writeHead(402, { "Content-Type": "application/json" });
-          clientRes.end(JSON.stringify({ error: "Payment Required — insufficient on-chain quota" }));
+          clientRes.end(JSON.stringify({ error: "Payment Required — insufficient in-memory fixture quota" }));
           return;
         }
 
-        // Set response headers showing on-chain status
+        // Set response headers showing in-memory fixture status
         clientRes.setHeader("X-Decant-Quota-Remaining", quota.remaining.toString());
         clientRes.setHeader("X-Decant-Quota-Total", quota.total.toString());
       } catch (err: any) {
@@ -113,7 +113,7 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
     assert.equal(isHealthy, true, "NEAR RPC sandbox must be healthy and reachable");
   });
 
-  it("On-chain ledger: register session and verify via view_method query", async () => {
+  it("In-memory fixture: register session and verify via view_method query", async () => {
     sandboxServer.registerSession("session-alpha", 100, "alice.test.near");
 
     const quota = await nearRpc.getQuota("session-alpha");
@@ -158,7 +158,7 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
     });
     assert.equal(res.status, 401);
     const body = await res.json() as { error: string };
-    assert.ok(body.error.includes("not registered on-chain"));
+    assert.ok(body.error.includes("not registered in-memory fixture"));
   });
 
   it("HARD GATE: Register session with 100 allotted compute units, proxy succeeds", async () => {
@@ -179,10 +179,10 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
     assert.equal(json.status, "upstream_ok");
   });
 
-  it("HARD GATE: Consume quota on-chain, verify proxy reflects decreased balance", async () => {
+  it("HARD GATE: Consume quota in-memory fixture, verify proxy reflects decreased balance", async () => {
     const testSession = "gate-session-100";
 
-    // Consume 10 units on-chain
+    // Consume 10 units in-memory fixture
     sandboxServer.consumeQuota(testSession, 10);
 
     // Verify remaining is now 90
@@ -197,13 +197,13 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
     assert.equal(res.headers.get("x-decant-quota-remaining"), "90");
   });
 
-  it("HARD GATE: Exhaust on-chain quota, gateway immediately locks out agent with 402", async () => {
+  it("HARD GATE: Exhaust in-memory fixture quota, gateway immediately locks out agent with 402", async () => {
     const testSession = "gate-session-100";
 
     // Drain the remaining 90 tokens on the ledger
     sandboxServer.consumeQuota(testSession, 90);
 
-    // Verify remaining is 0 on-chain
+    // Verify remaining is 0 in-memory fixture
     const onchain = await nearRpc.getQuota(testSession);
     assert.equal(onchain!.remaining, 0);
 
@@ -211,15 +211,15 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
     const res = await fetch(`http://127.0.0.1:${gatewayPort}/api/v1/infer`, {
       headers: { "X-Decant-Session": testSession },
     });
-    assert.equal(res.status, 402, "Must return 402 Payment Required when on-chain quota is exhausted");
+    assert.equal(res.status, 402, "Must return 402 Payment Required when in-memory fixture quota is exhausted");
     const body = await res.json() as { error: string };
-    assert.ok(body.error.includes("insufficient on-chain quota"));
+    assert.ok(body.error.includes("insufficient in-memory fixture quota"));
   });
 
-  it("HARD GATE: Top up on-chain quota, gateway immediately re-enables access", async () => {
+  it("HARD GATE: Top up in-memory fixture quota, gateway immediately re-enables access", async () => {
     const testSession = "gate-session-100";
 
-    // Top up by 50 units on-chain
+    // Top up by 50 units in-memory fixture
     sandboxServer.topupQuota(testSession, 50);
 
     // Proxy allows requests again
@@ -231,7 +231,7 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
     assert.equal(res.headers.get("x-decant-quota-total"), "150");
   });
 
-  it("COMPUTE-TO-VALUE: Solver earns credit tokens upon fulfilling compute workload", async () => {
+  it("LEGACY RECORD FIXTURE: Solver earns credit tokens upon fulfilling compute workload", async () => {
     const solverAccount = "solver-llama3.test.near";
 
     // Solver serves inference and is rewarded 500 compute credits
@@ -241,7 +241,7 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
     assert.equal(balance, 500, "Solver balance must reflect earned compute tokens");
   });
 
-  it("COMPUTE-TO-VALUE: Solver redeems earned compute credits for spendable USDT value", async () => {
+  it("LEGACY RECORD FIXTURE: Solver redeems earned compute credits for a local USD-denominated record", async () => {
     const solverAccount = "solver-llama3.test.near";
 
     // Redeem 500 earned credits for USDT (1,000 credits = $1.00 USDT -> 500 credits = $0.50 USDT = 50 cents)
@@ -251,7 +251,7 @@ describe("Phase 3 — NEAR Intent Settlement Layer & Validation Gate", () => {
     assert.equal(redemption.usdt_amount_cents, 50);
     assert.equal(redemption.status, "Settled");
 
-    // Remaining on-chain balance must now be 0
+    // Remaining in-memory fixture balance must now be 0
     const remainingBalance = await nearRpc.getEarnedCredits(solverAccount);
     assert.equal(remainingBalance, 0);
 
