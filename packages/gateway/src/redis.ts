@@ -115,6 +115,7 @@ export class DecantRedisClient {
         this.socket.on("close", () => {
           this.connected = false;
           this.connecting = false;
+          this.drainPendingCallbacks(new Error("Redis connection closed"));
           this.scheduleReconnect();
         });
       } catch (err: any) {
@@ -146,6 +147,16 @@ export class DecantRedisClient {
     }
     this.connected = false;
     this.connecting = false;
+    this.drainPendingCallbacks(new Error("Redis client disconnected"));
+  }
+
+  private drainPendingCallbacks(err: Error): void {
+    while (this.pendingCallbacks.length > 0) {
+      const cb = this.pendingCallbacks.shift();
+      if (cb) {
+        try { cb(err, null); } catch {}
+      }
+    }
   }
 
   private sendCommand(args: string[], callback: (err: Error | null, res: any) => void): void {

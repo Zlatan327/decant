@@ -733,6 +733,7 @@ export class DecantGatewayServer {
               if (streaming) {
                 if (!res.headersSent) res.writeHead(200, { ...this.getCorsHeaders(req),
                   "Content-Type": "text/event-stream", "Cache-Control": "no-cache",
+                  "X-Accel-Buffering": "no",
                   "X-Decant-Session": sessionId,
                   "X-Decant-Node-Id": this.nodeId,
                   "X-Decant-Quota-Remaining": this.ledger.getSession(sessionId)!.remainingQuota.toString() });
