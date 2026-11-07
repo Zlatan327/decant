@@ -363,6 +363,16 @@ export class DecantLedger {
         (tx_id, session_id, prompt_tokens, completion_tokens, cost_units, model, upstream_latency_ms, timestamp)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(requestId, row.session_id, promptUnits, completionUnits, usedUnits, model, latencyMs, Date.now());
+
+      // Credit the active compute provider / solver in real time
+      try {
+        const activeSolver = this.db.prepare(`SELECT solver_id FROM solvers WHERE is_active = 1 LIMIT 1`).get() as any;
+        if (activeSolver && activeSolver.solver_id) {
+          this.recordSolverEarnings(activeSolver.solver_id, usedUnits);
+        }
+      } catch {
+        // Silently continue if solvers table is empty or uninitialized
+      }
     }
   }
 
@@ -426,6 +436,21 @@ export class DecantLedger {
       throw new Error("Quota exceeds safe integer range");
     }
     return this.getSession(sessionId)!;
+  }
+
+  public suspendSession(sessionId: string): SessionRecord {
+    const session = this.getSession(sessionId);
+    if (!session) throw new Error(`Session '${sessionId}' not found.`);
+    this.db.prepare("UPDATE sessions SET status = 'suspended' WHERE session_id = ?").run(sessionId);
+    return { ...session, status: 'suspended' };
+  }
+
+  public resumeSession(sessionId: string): SessionRecord {
+    const session = this.getSession(sessionId);
+    if (!session) throw new Error(`Session '${sessionId}' not found.`);
+    const newStatus = session.remainingQuota > 0 ? 'active' : 'exhausted';
+    this.db.prepare("UPDATE sessions SET status = ? WHERE session_id = ?").run(newStatus, sessionId);
+    return { ...session, status: newStatus };
   }
 
   // ─── Intent Registry ──────────────────────────────────────────────────────
@@ -536,6 +561,66 @@ export class DecantLedger {
     const cleanSolverId = (solverId || "").trim();
     const row = this.db.prepare(`SELECT earned_credits FROM solver_earnings WHERE solver_id = ?`).get(cleanSolverId) as any;
     return row ? Number(row.earned_credits) : 0;
+  }
+
+  public registerSolver(solver: Partial<SolverRecord> & { solverId: string }): SolverRecord {
+    if (!solver.solverId || !solver.solverId.trim()) throw new Error("solverId is required");
+    const cleanId = solver.solverId.trim();
+    const endpoint = solver.endpointUrl || "https://api.decant.internal";
+    const models = JSON.stringify(solver.modelsSupported || ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]);
+    const price = Number(solver.pricePerKTokens) || 1.0;
+    const rep = Number(solver.reputationScore) || 5.0;
+    const active = solver.isActive !== false ? 1 : 0;
+
+    this.db.prepare(`
+      INSERT INTO solvers (solver_id, endpoint_url, models_supported, price_per_k_tokens, reputation_score, is_active)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(solver_id) DO UPDATE SET
+        endpoint_url = excluded.endpoint_url,
+        models_supported = excluded.models_supported,
+        price_per_k_tokens = excluded.price_per_k_tokens,
+        is_active = excluded.is_active
+    `).run(cleanId, endpoint, models, price, rep, active);
+
+    return this.getSolver(cleanId)!;
+  }
+
+  public getSolver(solverId: string): SolverRecord | null {
+    const row = this.db.prepare(`SELECT * FROM solvers WHERE solver_id = ?`).get(solverId.trim()) as any;
+    if (!row) return null;
+    let models: string[] = [];
+    try { models = JSON.parse(row.models_supported); } catch { models = [row.models_supported]; }
+    return {
+      solverId: row.solver_id,
+      endpointUrl: row.endpoint_url,
+      modelsSupported: models,
+      pricePerKTokens: Number(row.price_per_k_tokens),
+      reputationScore: Number(row.reputation_score),
+      isActive: Boolean(row.is_active)
+    };
+  }
+
+  public listSolvers(): (SolverRecord & { earnedCredits: number })[] {
+    const rows = this.db.prepare(`SELECT * FROM solvers ORDER BY reputation_score DESC`).all() as any[];
+    return rows.map((row) => {
+      let models: string[] = [];
+      try { models = JSON.parse(row.models_supported); } catch { models = [row.models_supported]; }
+      const earned = this.getSolverEarnings(row.solver_id);
+      return {
+        solverId: row.solver_id,
+        endpointUrl: row.endpoint_url,
+        modelsSupported: models,
+        pricePerKTokens: Number(row.price_per_k_tokens),
+        reputationScore: Number(row.reputation_score),
+        isActive: Boolean(row.is_active),
+        earnedCredits: earned,
+      };
+    });
+  }
+
+  public setSolverActive(solverId: string, isActive: boolean): void {
+    this.db.prepare(`UPDATE solvers SET is_active = ? WHERE solver_id = ?`)
+      .run(isActive ? 1 : 0, solverId.trim());
   }
 
   /** Retained as an explicit fail-closed boundary for older programmatic callers. */

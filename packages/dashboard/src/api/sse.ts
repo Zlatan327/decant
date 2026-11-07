@@ -2,10 +2,18 @@ import { MAX_REQUEST_BODY_BYTES } from '../domain/constants';
 import { ApiRequestError, gatewayUrl, parseApiError, operatorHeaders } from './client';
 import type { SSEChunk } from '../domain/types';
 
+export interface ChatMessageItem {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
 export interface ChatStreamInput {
   sessionId: string;
   model: string;
   prompt: string;
+  maxTokens?: number;
+  temperature?: number;
+  messages?: ChatMessageItem[];
   signal?: AbortSignal;
   onToken: (token: string) => void;
   onModel: (model: string) => void;
@@ -52,11 +60,18 @@ function parseChunk(data: string, onToken: (token: string) => void, onModel: (mo
 
 export async function streamChatCompletion(input: ChatStreamInput): Promise<ChatStreamResult> {
   const path = '/v1/chat/completions';
+  const messages = input.messages && input.messages.length > 0
+    ? input.messages
+    : [{ role: 'user', content: input.prompt }];
+
   const payload = JSON.stringify({
     model: input.model,
-    messages: [{ role: 'user', content: input.prompt }],
+    messages,
     stream: true,
+    ...(input.maxTokens ? { max_tokens: input.maxTokens } : {}),
+    ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
   });
+
   if (new TextEncoder().encode(payload).byteLength > MAX_REQUEST_BODY_BYTES) {
     throw new ApiRequestError(413, path, 'Prompt payload exceeds the console limit for this gateway. Shorten the prompt and retry.');
   }

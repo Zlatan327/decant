@@ -40,6 +40,21 @@ export class DecantGatewayServer {
     this.compute = new DecantComputeEngine();
     this.adminKey = opts.adminKey ?? process.env["DECANT_ADMIN_KEY"];
 
+    try {
+      if (this.ledger.listSolvers().length === 0) {
+        this.ledger.registerSolver({
+          solverId: "decant-solver-primary.testnet",
+          endpointUrl: "https://api.decant.internal/inference",
+          modelsSupported: ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"],
+          pricePerKTokens: 1.0,
+          reputationScore: 4.95,
+          isActive: true,
+        });
+      }
+    } catch {
+      // Table may not exist yet in mocked test environments
+    }
+
     this.server = createServer((req, res) => this.handleRequest(req, res));
   }
 
@@ -157,6 +172,43 @@ export class DecantGatewayServer {
       }
 
       // ── Diagnostics & Health ────────────────────────────────────────────────
+            // ── OpenAI-Compatible Model Catalog ────────────────────────────────────
+      if (pathname === "/v1/models" && method === "GET") {
+        const modelData = this.compute.models.map((m) => {
+          const isLite = m.includes("lite");
+          const isPro = m.includes("pro") || m.includes("3.8");
+          return {
+            id: m,
+            object: "model",
+            created: 1740000000,
+            owned_by: m.startsWith("gemini") ? "google-deepmind" : "depin-cluster",
+            permission: [],
+            root: m,
+            parent: null,
+            capabilities: { streaming: true, chat: true, completion: true },
+            pricing: { credit_multiplier: isLite ? 0.5 : isPro ? 1.5 : 1.0, metering_unit: "ceil(characters / 4)" },
+            context_window: isLite ? 524288 : 1048576,
+          };
+        });
+        this.sendJson(res, 200, { object: "list", data: modelData }, {}, req);
+        return;
+      }
+
+      // ── Credit Packages / Pricing Catalog ──────────────────────────────────
+      if (pathname === "/v1/packages" && method === "GET") {
+        this.sendJson(res, 200, {
+          packages: [
+            { id: "trial", name: "Developer Trial", credits: 1000, priceNear: 0, description: "Free testnet sandbox allocation for quick validation", tier: "free" },
+            { id: "starter", name: "Agent Starter", credits: 5000, priceNear: 0.5, description: "Standard bundle for autonomous bots and agents", tier: "starter" },
+            { id: "pro", name: "Production Bot", credits: 25000, priceNear: 2.0, description: "High volume compute routing for production pipelines", tier: "pro" },
+            { id: "swarm", name: "Autonomous Swarm", credits: 100000, priceNear: 7.5, description: "Heavy throughput for coordinated agent swarms", tier: "swarm" },
+          ],
+          rate: "1 NEAR = 10,000 Compute Credits",
+          unitSize: "1 unit ≈ 4 characters of provider text",
+        }, {}, req);
+        return;
+      }
+
       if (pathname === "/v1/health" || pathname === "/health") {
         this.sendJson(res, 200, {
           status: "healthy",
@@ -221,7 +273,7 @@ export class DecantGatewayServer {
         || /^\/v1\/reservations\/[^/]+\/review$/.test(pathname)
         || pathname === "/v1/intents"
         || pathname === "/v1/redemptions"
-        || /^\/v1\/sessions\/[^/]+\/topup$/.test(pathname)
+        || /^\/v1\/sessions\/[^/]+\/(topup|suspend|resume)$/.test(pathname)
         || /^\/v1\/intents\/[^/]+\/fill$/.test(pathname)
         || /^\/v1\/solvers\/[^/]+\/(earnings|reward|redeem)$/.test(pathname);
       if (operatorRoute && !isAuthorizedAdmin(req)) {
@@ -260,6 +312,66 @@ export class DecantGatewayServer {
         return;
       }
 
+            if (pathname === "/v1/sessions/order" && method === "POST") {
+        const body = await this.parseJsonBody(req, 4 * 1024);
+        const { sessionId, publicKey, ownerAccountId, packageId, units, paymentMethod } = body;
+        if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
+          this.sendJson(res, 400, { error: "Valid sessionId is required" }, {}, req); return;
+        }
+        let creditUnits = Number(units) || 5000;
+        if (packageId === "trial") creditUnits = 1000;
+        else if (packageId === "starter") creditUnits = 5000;
+        else if (packageId === "pro") creditUnits = 25000;
+        else if (packageId === "swarm") creditUnits = 100000;
+
+        let session = this.ledger.getSession(sessionId);
+        if (!session) {
+          const keyToUse = publicKey && typeof publicKey === "string" && publicKey.trim()
+            ? publicKey.trim()
+            : `ed25519:${randomUUID().replace(/-/g, "")}`;
+          const ownerToUse = ownerAccountId && typeof ownerAccountId === "string" && ownerAccountId.trim()
+            ? ownerAccountId.trim()
+            : `${sessionId}.testnet`;
+          session = this.ledger.registerSession(sessionId, keyToUse, ownerToUse, creditUnits);
+        } else {
+          session = this.ledger.topupQuota(sessionId, creditUnits);
+        }
+
+        this.sendJson(res, 201, {
+          orderId: `ord_${Date.now()}_${randomUUID().slice(0, 6)}`,
+          status: "fulfilled",
+          session,
+          creditsProvisioned: creditUnits,
+          paymentMethod: paymentMethod || "testnet-settlement",
+          timestamp: Date.now(),
+        }, {}, req);
+        return;
+      }
+
+      if (/^\/v1\/sessions\/[^/]+\/faucet$/.test(pathname) && method === "POST") {
+        const sessionId = decodeURIComponent(pathname.split("/")[3]);
+        const session = this.ledger.getSession(sessionId);
+        if (!session) {
+          this.sendJson(res, 404, { error: `Session '${sessionId}' not found` }, {}, req);
+          return;
+        }
+        if (session.remainingQuota >= 2500) {
+          this.sendJson(res, 400, { error: "Session already has sufficient quota for testing (>= 2500 units)" }, {}, req);
+          return;
+        }
+        try {
+          const updated = this.ledger.topupQuota(sessionId, 1000);
+          this.sendJson(res, 200, {
+            session: updated,
+            claimedUnits: 1000,
+            message: "1,000 developer testnet credits added successfully",
+          }, {}, req);
+        } catch (err) {
+          this.sendJson(res, 500, { error: err.message }, {}, req);
+        }
+        return;
+      }
+
       if (pathname === "/v1/sessions" && method === "GET") {
         const sessions = this.ledger.listSessions();
         this.sendJson(res, 200, { sessions }, {}, req);
@@ -287,14 +399,50 @@ export class DecantGatewayServer {
         }
         const sessionId = decodeURIComponent(pathname.split("/")[3]);
         const body = await this.parseJsonBody(req);
-        if (!body.amount || body.amount <= 0) {
-          this.sendJson(res, 400, { error: "Valid 'amount' required" }, {}, req);
+        if (!body || typeof body.amount !== "number" || !Number.isSafeInteger(body.amount) || body.amount <= 0) {
+          this.sendJson(res, 400, { error: "Valid positive integer 'amount' required" }, {}, req);
+          return;
+        }
+
+        const existing = this.ledger.getSession(sessionId);
+        if (!existing) {
+          this.sendJson(res, 404, { error: `Session '${sessionId}' not found` }, {}, req);
           return;
         }
 
         try {
           const session = this.ledger.topupQuota(sessionId, body.amount);
           this.sendJson(res, 200, session, {}, req);
+        } catch (err: any) {
+          this.sendJson(res, 400, { error: err.message }, {}, req);
+        }
+        return;
+      }
+
+      if (/^\/v1\/sessions\/[^/]+\/suspend$/.test(pathname) && method === "POST") {
+        if (!isAuthorizedAdmin(req)) {
+          this.sendJson(res, 403, { error: "Forbidden — missing or invalid X-Decant-Admin-Key" }, {}, req);
+          return;
+        }
+        const sessionId = decodeURIComponent(pathname.split("/")[3]);
+        try {
+          const session = this.ledger.suspendSession(sessionId);
+          this.sendJson(res, 200, { session }, {}, req);
+        } catch (err: any) {
+          this.sendJson(res, 404, { error: err.message }, {}, req);
+        }
+        return;
+      }
+
+      if (/^\/v1\/sessions\/[^/]+\/resume$/.test(pathname) && method === "POST") {
+        if (!isAuthorizedAdmin(req)) {
+          this.sendJson(res, 403, { error: "Forbidden — missing or invalid X-Decant-Admin-Key" }, {}, req);
+          return;
+        }
+        const sessionId = decodeURIComponent(pathname.split("/")[3]);
+        try {
+          const session = this.ledger.resumeSession(sessionId);
+          this.sendJson(res, 200, { session }, {}, req);
         } catch (err: any) {
           this.sendJson(res, 404, { error: err.message }, {}, req);
         }
@@ -371,6 +519,78 @@ export class DecantGatewayServer {
         } catch (err: any) {
           this.sendJson(res, 400, { error: err.message }, {}, req);
         }
+        return;
+      }
+
+      // ── Compute Providers (Solvers) API Supply ─────────────────────────────
+      if (pathname === "/v1/solvers" && method === "GET") {
+        const solvers = this.ledger.listSolvers();
+        this.sendJson(res, 200, { solvers }, {}, req);
+        return;
+      }
+
+      if (pathname === "/v1/solvers/register" && method === "POST") {
+        const rawBody = await this.parseBody(req, 4 * 1024);
+        let body: any;
+        try { body = JSON.parse(rawBody || "{}"); } catch {
+          this.sendJson(res, 400, { error: "Malformed JSON payload" }, {}, req);
+          return;
+        }
+
+        const solverId = (body.solverId || "").trim();
+        if (!solverId) {
+          this.sendJson(res, 400, { error: "solverId is required" }, {}, req);
+          return;
+        }
+
+        const solver = this.ledger.registerSolver({
+          solverId,
+          endpointUrl: body.endpointUrl || "https://api.decant.internal",
+          modelsSupported: Array.isArray(body.modelsSupported) && body.modelsSupported.length > 0
+            ? body.modelsSupported
+            : ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"],
+          pricePerKTokens: Number(body.pricePerKTokens) || 1.0,
+          reputationScore: 5.0,
+          isActive: body.isActive !== false,
+        });
+
+        this.sendJson(res, 201, {
+          solver,
+          message: "Compute provider registered successfully. Your node is now active and will earn credits when serving queries.",
+        }, {}, req);
+        return;
+      }
+
+      if (/^\/v1\/solvers\/[^/]+\/toggle$/.test(pathname) && method === "POST") {
+        const solverId = decodeURIComponent(pathname.split("/")[3]);
+        const solver = this.ledger.getSolver(solverId);
+        if (!solver) {
+          this.sendJson(res, 404, { error: `Solver '${solverId}' not found` }, {}, req);
+          return;
+        }
+        const newStatus = !solver.isActive;
+        this.ledger.setSolverActive(solverId, newStatus);
+        this.sendJson(res, 200, { solverId, isActive: newStatus }, {}, req);
+        return;
+      }
+
+      if (/^\/v1\/solvers\/[^/]+\/stats$/.test(pathname) && method === "GET") {
+        const solverId = decodeURIComponent(pathname.split("/")[3]);
+        const solver = this.ledger.getSolver(solverId);
+        if (!solver) {
+          this.sendJson(res, 404, { error: `Solver '${solverId}' not found` }, {}, req);
+          return;
+        }
+        const earned = this.ledger.getSolverEarnings(solverId);
+        this.sendJson(res, 200, {
+          solverId,
+          isActive: solver.isActive,
+          earnedCredits: earned,
+          endpointUrl: solver.endpointUrl,
+          modelsSupported: solver.modelsSupported,
+          reputationScore: solver.reputationScore,
+          rate: `${solver.pricePerKTokens} units / 1K tokens`,
+        }, {}, req);
         return;
       }
 

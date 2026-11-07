@@ -129,7 +129,6 @@ export class DecantClient {
       model: this.model,
       max_tokens: this.maxOutputUnits,
       messages: [{ role: "user", content: prompt }],
-      prompt,
       stream: true,
     });
 

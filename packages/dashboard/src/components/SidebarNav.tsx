@@ -3,6 +3,8 @@ import { DecantLogoMark } from './DecantLogo';
 import { targetAttributes } from './targets';
 
 export type DashboardSection =
+  | 'shop'
+  | 'provider'
   | 'overview'
   | 'guide'
   | 'value'
@@ -40,6 +42,32 @@ export function SidebarNav({
 }: SidebarNavProps) {
   const effectiveTone = gatewayTone ?? (connected ? 'healthy' : 'offline');
   const navItems: NavItem[] = [
+    {
+      id: 'shop',
+      label: 'Compute Store',
+      shortLabel: 'Store',
+      badge: 'NEW',
+      description: 'Step-by-step model filtering, credit bundles, and checkout',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="9" cy="21" r="1" />
+          <circle cx="20" cy="21" r="1" />
+          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+        </svg>
+      ),
+    },
+    {
+      id: 'provider',
+      label: 'Supply Compute (Provider Studio)',
+      shortLabel: 'Provider',
+      badge: 'EARN',
+      description: 'Effortlessly connect your API key or compute node and earn credits',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+        </svg>
+      ),
+    },
     {
       id: 'overview',
       label: 'Overview',

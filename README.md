@@ -254,3 +254,8 @@ npm run build:contracts
 | `packages/agent-sdk` | Session identity, signing and streaming client |
 | `packages/contracts` | Rust NEAR ledger source; separate legacy in-memory RPC test fixture |
 | `packages/simulator` | Explicit local execution harness |
+
+
+## Independent hackathon participation
+
+Isaac (`0xaje`) assists with Decant's backend review and corrections and independently builds [Veyntro](https://github.com/0xaje/Veyntro). Decant and Veyntro are separate products with separate repositories and implementations. No Veyntro code is included in these corrections. This disclosure does not replace accurate contributor/team details in the submission.

@@ -49,12 +49,14 @@ const PROVIDERS: Provider[] = [
     label: 'OpenAI',
     mark: <img src="/brand/openai-wordmark.svg" alt="" />,
     section: 'request',
+    model: 'gpt-4o',
   },
   {
     id: 'anthropic',
     label: 'Claude',
     mark: brandMark(siAnthropic, '#D6B899'),
     section: 'request',
+    model: 'claude-3-5-sonnet',
   },
 ];
 
@@ -83,6 +85,22 @@ export function CentralMinimalistHero({ onNavigate }: CentralMinimalistHeroProps
           <p className="minimalist-hero__lead">
             One gateway for AI inference, scoped compute credits, and clear usage records. NEAR settlement is being connected.
           </p>
+          <div className="minimalist-hero__actions">
+            <button
+              type="button"
+              className="button button--primary hero-shop-cta"
+              onClick={() => onNavigate?.('shop')}
+            >
+              🛍️ Open Compute Store (Browse & Order)
+            </button>
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={() => onNavigate?.('request')}
+            >
+              ⚡ Live Playground
+            </button>
+          </div>
         </div>
 
         <div className="minimalist-hero__providers">

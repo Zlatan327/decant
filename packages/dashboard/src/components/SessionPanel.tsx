@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { errorMessage } from '../api/client';
-import { MAX_TRACKED_SESSIONS } from '../domain/constants';
+import { generateAgentKeypair } from '../domain/crypto';
 import { formatDateTime, formatNumber, quotaPercent, shortIdentifier } from '../domain/format';
 import type { ApiResource, RegisterSessionInput, SessionDetail, SessionRecord, TransactionRecord } from '../domain/types';
 import { targetAttributes } from './targets';
@@ -15,6 +15,8 @@ interface SessionPanelProps {
   onUntrack: (sessionId: string) => void;
   onRegister: (input: RegisterSessionInput) => Promise<SessionRecord>;
   onTopUp: (sessionId: string, amount: number) => Promise<SessionRecord>;
+  onSuspend?: (sessionId: string) => Promise<unknown>;
+  onResume?: (sessionId: string) => Promise<unknown>;
 }
 
 function statusClass(status: string): string {
@@ -37,6 +39,8 @@ function SessionCard({
   onSelect,
   onUntrack,
   onTopUp,
+  onSuspend,
+  onResume,
 }: {
   session: SessionRecord;
   selected: boolean;
@@ -44,6 +48,8 @@ function SessionCard({
   onSelect: (sessionId: string) => void;
   onUntrack: (sessionId: string) => void;
   onTopUp: (sessionId: string, amount: number) => Promise<SessionRecord>;
+  onSuspend?: (sessionId: string) => Promise<unknown>;
+  onResume?: (sessionId: string) => Promise<unknown>;
 }) {
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [amount, setAmount] = useState('');
@@ -64,6 +70,22 @@ function SessionCard({
       setTopUpOpen(false);
     } catch (submitError) {
       setError(errorMessage(submitError));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleToggleSuspend() {
+    setPending(true);
+    setError(null);
+    try {
+      if (status === 'suspended') {
+        if (onResume) await onResume(session.sessionId);
+      } else {
+        if (onSuspend) await onSuspend(session.sessionId);
+      }
+    } catch (toggleError) {
+      setError(errorMessage(toggleError));
     } finally {
       setPending(false);
     }
@@ -118,6 +140,17 @@ function SessionCard({
           >
             {topUpOpen ? 'Close' : 'Add quota'}
           </button>
+          {(onSuspend || onResume) && (
+            <button
+              type="button"
+              className={`button button--small ${status === 'suspended' ? 'button--primary' : 'button--quiet'}`}
+              onClick={handleToggleSuspend}
+              disabled={pending}
+              title={status === 'suspended' ? 'Re-enable this session key' : 'Emergency kill switch: suspend key immediately'}
+            >
+              {status === 'suspended' ? 'Resume' : 'Suspend'}
+            </button>
+          )}
           {tracked && (
             <button
               type="button"
@@ -132,6 +165,7 @@ function SessionCard({
           )}
         </div>
       </div>
+      {error && <p className="inline-error" role="alert" style={{ margin: '6px 0 0' }}>{error}</p>}
       {topUpOpen && (
         <form className="inline-form inline-form--compact" onSubmit={submitTopUp} {...targetAttributes('session-topup-form', 'panel')}>
           <label htmlFor={`topup-${session.sessionId}`}>Quota units to add</label>
@@ -153,7 +187,6 @@ function SessionCard({
             </button>
           </div>
           <p className="field-note">This calls the gateway top-up endpoint for this session.</p>
-          {error && <p className="inline-error" role="alert">{error}</p>}
         </form>
       )}
     </li>
@@ -167,8 +200,9 @@ function RecentTransactions({ transactions }: { transactions: TransactionRecord[
       {transactions.slice(0, 3).map((transaction) => (
         <li key={transaction.txId} {...targetAttributes('session-recent-transaction', 'list-item')}>
           <span className="mono">{shortIdentifier(transaction.txId, 7)}</span>
-          <span>{formatNumber(transaction.costUnits)} credit units</span>
-          <time dateTime={new Date(transaction.timestamp).toISOString()}>{formatDateTime(transaction.timestamp)}</time>
+          <span className="mono">-{formatNumber(transaction.costUnits)}</span>
+          <span className="metric-label">{transaction.model}</span>
+          <span className="metric-label mono">{formatDateTime(transaction.timestamp)}</span>
         </li>
       ))}
     </ol>
@@ -185,6 +219,8 @@ export function SessionPanel({
   onUntrack,
   onRegister,
   onTopUp,
+  onSuspend,
+  onResume,
 }: SessionPanelProps) {
   const [trackInput, setTrackInput] = useState('');
   const [trackError, setTrackError] = useState<string | null>(null);
@@ -192,39 +228,48 @@ export function SessionPanel({
   const [sessionId, setSessionId] = useState('');
   const [publicKey, setPublicKey] = useState('');
   const [ownerAccountId, setOwnerAccountId] = useState('');
-  const [quota, setQuota] = useState('10000');
-  const [registerPending, setRegisterPending] = useState(false);
+  const [quota, setQuota] = useState('100');
   const [registerError, setRegisterError] = useState<string | null>(null);
+  const [registering, setRegistering] = useState(false);
+  const [generatedIdentity, setGeneratedIdentity] = useState<any | null>(null);
 
   const records = sessions.data ?? [];
-  const detail = sessionDetail.data?.session.sessionId === selectedSessionId ? sessionDetail.data : null;
-  const detailTransactions = detail ? [...detail.transactions].sort((a, b) => b.timestamp - a.timestamp) : [];
-  const knownIds = new Set(records.map((record) => record.sessionId));
-  const unresolvedTrackedIds = trackedSessionIds.filter((id) => !knownIds.has(id));
-  const sourceLabel = sessions.scope === 'global'
-    ? 'GLOBAL REGISTRY'
-    : sessions.scope === 'tracked'
-      ? 'EXPLICIT TRACK ONLY'
-      : 'REGISTRY UNAVAILABLE';
+  const returnedIds = new Set(records.map((record) => record.sessionId));
+  const unresolvedTrackedIds = trackedSessionIds.filter((id) => !returnedIds.has(id));
+  const detail = sessionDetail.data?.session;
+  const detailTransactions = sessionDetail.data?.transactions ?? [];
+
+  async function handleGenerateKeys() {
+    try {
+      const identity = await generateAgentKeypair();
+      setGeneratedIdentity(identity);
+      setSessionId(identity.sessionId);
+      setPublicKey(identity.publicKey);
+      setOwnerAccountId(`${identity.sessionId}.testnet`);
+      setRegisterOpen(true);
+    } catch {
+      setRegisterError('Could not generate keys in this browser context.');
+    }
+  }
 
   function submitTracking(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const normalized = trackInput.trim();
-    if (!normalized) return;
-    if (!trackedSessionIds.includes(normalized) && trackedSessionIds.length >= MAX_TRACKED_SESSIONS) {
-      setTrackError(`This browser retains up to ${MAX_TRACKED_SESSIONS} explicit session IDs. Untrack one before adding another.`);
+    const clean = trackInput.trim();
+    if (!clean) return;
+    if (trackedSessionIds.includes(clean)) {
+      setTrackError('This session ID is already tracked.');
       return;
     }
     setTrackError(null);
-    onTrack(normalized);
+    onTrack(clean);
     setTrackInput('');
   }
 
-  async function submitRegistration(event: React.FormEvent<HTMLFormElement>) {
+  async function submitRegister(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const quotaValue = Number(quota);
-    if (!sessionId.trim() || !publicKey.trim() || !Number.isInteger(quotaValue) || quotaValue < 1 || registerPending) return;
-    setRegisterPending(true);
+    if (!sessionId.trim() || !publicKey.trim() || !Number.isInteger(quotaValue) || quotaValue < 1 || registering) return;
+    setRegistering(true);
     setRegisterError(null);
     try {
       await onRegister({
@@ -236,26 +281,112 @@ export function SessionPanel({
       setSessionId('');
       setPublicKey('');
       setOwnerAccountId('');
+      setQuota('100');
       setRegisterOpen(false);
     } catch (error) {
       setRegisterError(errorMessage(error));
     } finally {
-      setRegisterPending(false);
+      setRegistering(false);
     }
   }
 
   return (
-    <section className="panel session-panel" aria-labelledby="sessions-heading" {...targetAttributes('agent-session-panel', 'panel')}>
-      <div className="panel-heading">
+    <div className="panel" {...targetAttributes('agent-session-panel', 'panel')}>
+      <div className="panel__header">
         <div>
-          <p className="eyebrow">Identity / credit</p>
-          <h2 id="sessions-heading">Agent sessions</h2>
+          <h3>Sessions & Cryptographic Keys</h3>
+          <p className="panel__desc">Agent identities, remaining credit, and kill switches.</p>
         </div>
-        <div className="session-panel__summary">
-          <span className="source-badge">{sourceLabel}</span>
-          <span className="panel-count mono">{sessions.data === null ? '—' : formatNumber(records.length)}</span>
+        <div className="action-row">
+          <button
+            type="button"
+            className="button button--secondary button--small"
+            onClick={handleGenerateKeys}
+            title="Generate a new Ed25519 keypair for autonomous agents"
+          >
+            ⚡ Generate Keypair
+          </button>
+          <button
+            type="button"
+            className="button button--primary button--small"
+            onClick={() => { setRegisterOpen((open) => !open); setRegisterError(null); }}
+            data-render-target="open-register-session"
+            data-motion-trigger="interaction"
+          >
+            {registerOpen ? 'Cancel' : 'Enroll Session'}
+          </button>
         </div>
       </div>
+
+      {generatedIdentity && (
+        <div className="generated-key-banner" style={{ background: 'rgba(0, 236, 151, 0.08)', border: '1px solid rgba(0, 236, 151, 0.25)', borderRadius: '10px', padding: '12px 14px', margin: '14px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <strong style={{ color: 'var(--near-green)', fontSize: '0.82rem' }}>⚡ Cryptographic Identity Generated</strong>
+            <button type="button" className="button button--quiet button--small" onClick={() => setGeneratedIdentity(null)}>Dismiss</button>
+          </div>
+          <p style={{ margin: '0 0 6px', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.8)' }}>
+            <strong>Private Key (Save now — shown once):</strong>
+          </p>
+          <code style={{ display: 'block', padding: '6px 8px', background: 'rgba(0, 0, 0, 0.4)', borderRadius: '6px', fontSize: '0.75rem', wordBreak: 'break-all', color: '#00EC97', marginBottom: '8px' }}>
+            {generatedIdentity.privateKey}
+          </code>
+        </div>
+      )}
+
+      {registerOpen && (
+        <form className="stacked-form" onSubmit={submitRegister} {...targetAttributes('register-session-form', 'panel')}>
+          <div className="form-group">
+            <label htmlFor="reg-session-id">Session ID</label>
+            <input
+              id="reg-session-id"
+              type="text"
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value)}
+              placeholder="e.g. agent-autonomous-01"
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="reg-public-key">Ed25519 Public Key (ed25519:...)</label>
+            <input
+              id="reg-public-key"
+              type="text"
+              value={publicKey}
+              onChange={(e) => setPublicKey(e.target.value)}
+              placeholder="ed25519:Base58EncodedPublicKey"
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="reg-owner">Owner Account (Optional)</label>
+            <input
+              id="reg-owner"
+              type="text"
+              value={ownerAccountId}
+              onChange={(e) => setOwnerAccountId(e.target.value)}
+              placeholder="agent.testnet"
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="reg-quota">Initial Quota (Credit Units)</label>
+            <input
+              id="reg-quota"
+              type="number"
+              min="1"
+              step="1"
+              value={quota}
+              onChange={(e) => setQuota(e.target.value)}
+              required
+            />
+          </div>
+          {registerError && <p className="inline-error">{registerError}</p>}
+          <div className="action-row">
+            <button type="submit" className="button button--primary" disabled={registering}>
+              {registering ? 'Enrolling…' : 'Confirm Enrollment'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {sessions.message && (
         <p className={`resource-message${sessions.status === 'error' || sessions.status === 'unavailable' || sessions.status === 'stale' ? ' resource-message--warning' : ''}`} role={sessions.status === 'error' ? 'alert' : 'status'}>
@@ -273,6 +404,8 @@ export function SessionPanel({
             onSelect={onSelect}
             onUntrack={onUntrack}
             onTopUp={onTopUp}
+            onSuspend={onSuspend}
+            onResume={onResume}
           />
         ))}
       </ul>
@@ -281,7 +414,7 @@ export function SessionPanel({
         <div className="empty-state" data-render-target="sessions-empty-state" data-motion-trigger="status">
           <p className="empty-state__title">{sessions.status === 'loading' ? 'Connecting to session registry' : 'No session records available'}</p>
           <p className="empty-state__body">
-            {sessions.message ?? 'Session data appears here only after the gateway returns it or you track a known session ID.'}
+            {sessions.message ?? 'Enroll an agent session key above to grant inference credits.'}
           </p>
         </div>
       )}
@@ -306,64 +439,24 @@ export function SessionPanel({
             type="text"
             value={trackInput}
             onChange={(event) => setTrackInput(event.target.value)}
-            placeholder="Paste an exact session ID"
-            autoComplete="off"
-            maxLength={200}
-            data-render-target="track-session-id-input"
+            placeholder="Enter session ID to track"
+            data-render-target="track-session-input"
             data-motion-trigger="interaction"
           />
-          <button type="submit" className="button button--quiet" disabled={!trackInput.trim()} data-render-target="track-session-submit" data-motion-trigger="interaction">Track</button>
+          <button className="button button--quiet button--small" type="submit" disabled={!trackInput.trim()} data-render-target="submit-track-session" data-motion-trigger="interaction">
+            Track
+          </button>
         </div>
-        <p className="field-note">Explicit IDs are stored in this browser only, up to {MAX_TRACKED_SESSIONS}. No private key is requested.</p>
         {trackError && <p className="inline-error" role="alert">{trackError}</p>}
       </form>
 
-      <details className="disclosure" open={registerOpen} onToggle={(event) => setRegisterOpen(event.currentTarget.open)}>
-        <summary data-render-target="toggle-session-registration" data-motion-trigger="interaction">Register a session</summary>
-        <form className="form-stack" onSubmit={submitRegistration} {...targetAttributes('register-session-form', 'panel')}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="field-note" style={{ margin: 0 }}>Register a new Ed25519 agent identity and credit quota</span>
-            <button
-              type="button"
-              className="button button--quiet button--small"
-              onClick={() => {
-                const chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-                let rand = '';
-                for (let i = 0; i < 43; i++) rand += chars.charAt(Math.floor(Math.random() * chars.length));
-                const newId = `agent-${rand.substring(0, 8).toLowerCase()}`;
-                setSessionId(newId);
-                setPublicKey(`ed25519:${rand}`);
-                setOwnerAccountId(`${newId}.testnet`);
-                setQuota('5000');
-              }}
-              title="Generate a valid random Ed25519 session ID and public key"
-            >
-              + Generate Random Identity
-            </button>
-          </div>
-          <label htmlFor="register-session-id">Session ID</label>
-          <input id="register-session-id" type="text" value={sessionId} onChange={(event) => setSessionId(event.target.value)} autoComplete="off" required maxLength={200} placeholder="e.g. agent-alpha" data-render-target="register-session-id" data-motion-trigger="interaction" />
-          <label htmlFor="register-public-key">Agent public key</label>
-          <input id="register-public-key" type="text" value={publicKey} onChange={(event) => setPublicKey(event.target.value)} autoComplete="off" required maxLength={512} placeholder="ed25519:..." data-render-target="register-session-public-key" data-motion-trigger="interaction" />
-          <p className="field-note">Only the public key is sent. This dashboard never asks for the agent's private signing key.</p>
-          <label htmlFor="register-owner-id">Owner account ID <span className="muted">(optional)</span></label>
-          <input id="register-owner-id" type="text" value={ownerAccountId} onChange={(event) => setOwnerAccountId(event.target.value)} autoComplete="off" maxLength={200} placeholder="e.g. agent.testnet" data-render-target="register-session-owner" data-motion-trigger="interaction" />
-          <label htmlFor="register-quota">Initial quota units</label>
-          <input id="register-quota" type="number" min="1" step="1" inputMode="numeric" value={quota} onChange={(event) => setQuota(event.target.value)} required data-render-target="register-session-quota" data-motion-trigger="interaction" />
-          {registerError && <p className="inline-error" role="alert">{registerError}</p>}
-          <button type="submit" className="button button--primary" disabled={registerPending} data-render-target="submit-session-registration" data-motion-trigger="interaction">
-            {registerPending ? 'Registering…' : 'Register with gateway'}
-          </button>
-        </form>
-      </details>
-
       {selectedSessionId && (
-        <div className="session-detail" {...targetAttributes('selected-session-detail', 'panel')}>
-          <div className="section-subheading">
-            <h3>Selected session detail</h3>
+        <div className="session-detail-pane" {...targetAttributes('selected-session-detail', 'panel')}>
+          <div className="session-detail-pane__header">
+            <h4>Selected session detail</h4>
             <span className="mono">{shortIdentifier(selectedSessionId, 10)}</span>
           </div>
-          {sessionDetail.status === 'loading' && <p className="empty-note">Loading detail from `GET /v1/sessions/:id`…</p>}
+          {sessionDetail.status === 'loading' && <p className="empty-note">Loading detail from `GET /v1/sessions/:id`.</p>}
           {sessionDetail.message && !detail && <p className="resource-message resource-message--warning" role="status">{sessionDetail.message}</p>}
           {detail && (
             <>
@@ -373,6 +466,6 @@ export function SessionPanel({
           )}
         </div>
       )}
-    </section>
+    </div>
   );
 }

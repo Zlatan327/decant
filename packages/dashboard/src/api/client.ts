@@ -23,6 +23,7 @@ export function gatewayUrl(path: string): string {
 
 let operatorKey = '';
 export function setOperatorKey(value: string): void { operatorKey = value.trim(); }
+export function hasOperatorKey(): boolean { return operatorKey.length > 0; }
 export function operatorHeaders(): Record<string, string> {
   return operatorKey ? { 'X-Decant-Admin-Key': operatorKey } : {};
 }
@@ -183,6 +184,18 @@ export async function registerSession(input: RegisterSessionInput): Promise<Sess
 export async function topUpSession(sessionId: string, amount: number): Promise<SessionRecord> {
   const path = `/v1/sessions/${encodeURIComponent(sessionId)}/topup`;
   const payload = await requestJson(path, { method: 'POST', body: JSON.stringify({ amount }) });
+  return requireRecord(payload, path, isSessionRecord, 'session');
+}
+
+export async function suspendSession(sessionId: string): Promise<SessionRecord> {
+  const path = `/v1/sessions/${encodeURIComponent(sessionId)}/suspend`;
+  const payload = await requestJson(path, { method: 'POST' });
+  return requireRecord(payload, path, isSessionRecord, 'session');
+}
+
+export async function resumeSession(sessionId: string): Promise<SessionRecord> {
+  const path = `/v1/sessions/${encodeURIComponent(sessionId)}/resume`;
+  const payload = await requestJson(path, { method: 'POST' });
   return requireRecord(payload, path, isSessionRecord, 'session');
 }
 

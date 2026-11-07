@@ -10,7 +10,7 @@ interface ActivityFeedProps {
 interface FeedRow {
   id: string;
   timestamp: number;
-  source: string;
+  source: 'Gateway ledger' | 'This console';
   level: 'success' | 'warning' | 'blocked' | 'info';
   title: string;
   detail: string;
@@ -24,8 +24,8 @@ export function ActivityFeed({ transactions, events }: ActivityFeedProps) {
     timestamp: transaction.timestamp,
     source: 'Gateway ledger',
     level: 'success',
-    title: 'Inference transaction recorded',
-    detail: `Requested ${transaction.model} · ${formatNumber(transaction.promptTokens + transaction.completionTokens)} ledger tokens · ${formatNumber(transaction.costUnits)} credit units · ${formatNumber(transaction.upstreamLatencyMs)} ms upstream`,
+    title: 'Inference transaction returned',
+    detail: `Requested ${transaction.model} · ${formatNumber(transaction.promptTokens)} prompt + ${formatNumber(transaction.completionTokens)} completion tokens · ${formatNumber(transaction.costUnits)} cost units · ${formatNumber(transaction.upstreamLatencyMs)} ms upstream`,
     sessionId: transaction.sessionId,
     httpStatus: null,
   }));
@@ -46,21 +46,40 @@ export function ActivityFeed({ transactions, events }: ActivityFeedProps) {
   const messageTone = transactions.status === 'error' || transactions.status === 'unavailable' || transactions.status === 'stale'
     ? ' resource-message--warning'
     : '';
+  const ledgerScope = transactions.scope === 'global'
+    ? 'Global ledger snapshot'
+    : transactions.scope === 'per-session'
+      ? 'Session-scoped snapshot'
+      : 'Ledger unavailable';
+
+  let emptyTitle = 'No activity returned';
+  let emptyDescription = 'No gateway ledger rows or console-observed events are available in this view.';
+  if (transactions.status === 'loading' && events.length === 0) {
+    emptyTitle = 'Loading recent activity';
+    emptyDescription = 'Waiting for the gateway transaction snapshot.';
+  } else if ((transactions.status === 'error' || transactions.status === 'unavailable') && events.length === 0) {
+    emptyTitle = 'Gateway ledger unavailable';
+    emptyDescription = 'The ledger snapshot could not be loaded. Console observations are limited to actions made here.';
+  } else if (transactions.status === 'stale' && events.length === 0) {
+    emptyTitle = 'No current activity available';
+    emptyDescription = 'The most recent gateway snapshot could not be refreshed.';
+  }
 
   return (
     <section className="panel activity-panel" aria-labelledby="activity-heading" {...targetAttributes('observed-activity-feed', 'panel')}>
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Observed evidence</p>
-          <h2 id="activity-heading">Gateway activity</h2>
+          <p className="eyebrow">RECENT ACTIVITY</p>
+          <h2 id="activity-heading">Observed records</h2>
         </div>
-        <span className="source-badge">{transactions.scope === 'global' ? 'GLOBAL LEDGER' : transactions.scope === 'per-session' ? 'SCOPED LEDGER' : 'NO LEDGER FEED'}</span>
+        <span className="source-badge">{ledgerScope}</span>
       </div>
+      <p className="panel-intro">Gateway ledger means a transaction row returned by the API. This console means an action or HTTP error observed here.</p>
       {resourceMessage && <p className={`resource-message${messageTone}`} role={transactions.status === 'error' ? 'alert' : 'status'}>{resourceMessage}</p>}
       {rows.length === 0 ? (
         <div className="empty-state" data-render-target="activity-empty-state" data-motion-trigger="status">
-          <p className="empty-state__title">No activity observed yet</p>
-          <p className="empty-state__body">This feed uses returned ledger records and actions or HTTP errors observed by this console. It does not invent network traffic or claim a global rejection stream.</p>
+          <p className="empty-state__title">{emptyTitle}</p>
+          <p className="empty-state__body">{emptyDescription}</p>
         </div>
       ) : (
         <ol className="activity-list">
@@ -76,11 +95,11 @@ export function ActivityFeed({ transactions, events }: ActivityFeedProps) {
               <div className="activity-item__body">
                 <div className="activity-item__heading">
                   <strong>{row.title}</strong>
-                  <span className="source-label">{row.source}</span>
+                  <span className={`source-label source-label--${row.source === 'Gateway ledger' ? 'ledger' : 'console'}`}>{row.source}</span>
                 </div>
                 <p>{row.detail}</p>
                 <div className="activity-item__meta">
-                  {row.sessionId && <code title={row.sessionId}>{shortIdentifier(row.sessionId, 8)}</code>}
+                  {row.sessionId && <code title={row.sessionId} aria-label={row.sessionId}>{shortIdentifier(row.sessionId, 8)}</code>}
                   {row.httpStatus !== null && <span className="mono">HTTP {row.httpStatus}</span>}
                   <time dateTime={new Date(row.timestamp).toISOString()}>{formatDateTime(row.timestamp)}</time>
                 </div>
@@ -89,7 +108,10 @@ export function ActivityFeed({ transactions, events }: ActivityFeedProps) {
           ))}
         </ol>
       )}
-      <p className="scope-note">Ledger model fields reflect the request model recorded at settlement, not necessarily the provider model that produced SSE. A global feed of rejected requests requires a gateway event endpoint; only console-observed errors appear here.</p>
+      <details className="activity-boundary">
+        <summary>About activity coverage</summary>
+        <p className="scope-note">A ledger model field reflects the request model recorded at settlement, not necessarily the provider model that produced SSE; check the live inference response for that. Rejected requests from other agents are not available here without a gateway event endpoint.</p>
+      </details>
     </section>
   );
 }

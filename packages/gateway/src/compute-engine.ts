@@ -42,7 +42,22 @@ export class DecantComputeEngine {
   public promptUnits(messages: ChatMessage[]): number {
     return this.estimateTokens(messages.map(m => `${m.role}: ${m.content}`).join("\n"));
   }
-  public get models(): string[] { return [...new Set([this.defaultModel, this.geminiModel].filter((v): v is string => Boolean(v)))]; }
+  public get models(): string[] {
+    const list = new Set<string>();
+    if (this.defaultModel) list.add(this.defaultModel);
+    if (this.geminiModel) list.add(this.geminiModel);
+    if (this.geminiClient) {
+      list.add("gemini-3.5-flash");
+      list.add("gemini-3.5-flash-lite");
+      list.add("gemini-3.8-flash");
+    }
+    const extra = (process.env.DECANT_MODELS || process.env.SUPPORTED_MODELS || "")
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
+    for (const m of extra) list.add(m);
+    return [...list];
+  }
   public get configured(): boolean {
     return Boolean(this.defaultModel && ((this.geminiClient && this.geminiModel) || this.upstreamBaseUrl));
   }
@@ -65,7 +80,14 @@ export class DecantComputeEngine {
     };
 
     if (!model) throw new Error("Configure an inference model before requesting compute");
-    if (this.geminiClient && model === this.geminiModel) {
+    const isGeminiModel = Boolean(
+      this.geminiClient && (
+        model === this.geminiModel ||
+        model.startsWith("gemini-")
+      )
+    );
+
+    if (isGeminiModel && this.geminiClient) {
       const systemInstruction = opts.messages.filter(m => m.role === "system").map(m => m.content).join("\n");
       const response = await this.geminiClient.models.generateContentStream({
         model,

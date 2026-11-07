@@ -41,6 +41,33 @@ export interface TokenBucket {
 /** Per-session buckets keyed by session ID. */
 const buckets = new Map<string, TokenBucket>();
 
+export function getMaxPayloadBytes(): number {
+  const envVal = process.env["DECANT_MAX_CHAT_BODY_BYTES"];
+  if (envVal) {
+    const parsed = parseInt(envVal, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return 4 * 1024; // 4 KB default
+}
+
+export function getRateLimitMax(): number {
+  const envVal = process.env["DECANT_RATE_LIMIT_MAX"];
+  if (envVal) {
+    const parsed = parseInt(envVal, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return 3;
+}
+
+export function getRateLimitWindowMs(): number {
+  const envVal = process.env["DECANT_RATE_LIMIT_WINDOW_MS"];
+  if (envVal) {
+    const parsed = parseInt(envVal, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return 10_000;
+}
+
 const MAX_TOKENS = 3;
 const REFILL_INTERVAL_MS = 10_000; // 10 seconds
 const MAX_PAYLOAD_BYTES = 4 * 1024; // 4 KB
@@ -55,17 +82,19 @@ export function enforceRateLimit(
 ): boolean {
   const sessionId = req.headers[HEADER_SESSION] as string;
   const now = Date.now();
+  const maxTokens = getRateLimitMax();
+  const refillInterval = getRateLimitWindowMs();
 
   let bucket = buckets.get(sessionId);
   if (!bucket) {
-    bucket = { tokens: MAX_TOKENS, lastRefill: now };
+    bucket = { tokens: maxTokens, lastRefill: now };
     buckets.set(sessionId, bucket);
   }
 
   // Refill tokens if the window has elapsed
   const elapsed = now - bucket.lastRefill;
-  if (elapsed >= REFILL_INTERVAL_MS) {
-    bucket.tokens = MAX_TOKENS;
+  if (elapsed >= refillInterval) {
+    bucket.tokens = maxTokens;
     bucket.lastRefill = now;
   }
 
@@ -85,14 +114,15 @@ export function enforceRateLimit(
  */
 export function enforcePayloadSize(
   req: IncomingMessage,
-  res: ServerResponse
+  res: ServerResponse,
+  maxBytes: number = getMaxPayloadBytes()
 ): boolean {
   const lengthHeader = req.headers["content-length"];
   if (lengthHeader) {
     const length = parseInt(lengthHeader, 10);
-    if (!Number.isNaN(length) && length > MAX_PAYLOAD_BYTES) {
+    if (!Number.isNaN(length) && length > maxBytes) {
       res.writeHead(413, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Payload Too Large — max 4 KB" }));
+      res.end(JSON.stringify({ error: `Payload Too Large — max ${maxBytes} bytes` }));
       return false;
     }
   }

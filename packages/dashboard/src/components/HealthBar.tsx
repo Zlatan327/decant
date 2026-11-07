@@ -7,6 +7,7 @@ interface HealthBarProps {
   now: number;
   apiTarget: string;
   onRefresh: () => void;
+  showRefresh?: boolean;
 }
 
 function healthTone(resource: ApiResource<GatewayHealth>): string {
@@ -23,7 +24,7 @@ function ledgerLabel(ledger: string | undefined): string {
   return ledger.toLowerCase().includes('sqlite-acid-persistent') ? 'SQLite ACID' : ledger;
 }
 
-export function HealthBar({ resource, now, apiTarget, onRefresh }: HealthBarProps) {
+export function HealthBar({ resource, now, apiTarget, onRefresh, showRefresh = true }: HealthBarProps) {
   const health = resource.data;
   const tone = healthTone(resource);
   const uptimeTimestamp = health?.timestamp ?? resource.checkedAt;
@@ -64,7 +65,7 @@ export function HealthBar({ resource, now, apiTarget, onRefresh }: HealthBarProp
         <span className="sync-label">
           {resource.checkedAt === null ? 'Last check —' : `Checked ${formatDateTime(resource.checkedAt)}`}
         </span>
-        <button
+        {showRefresh && <button
           type="button"
           className="button button--quiet"
           onClick={onRefresh}
@@ -73,7 +74,7 @@ export function HealthBar({ resource, now, apiTarget, onRefresh }: HealthBarProp
           aria-label="Refresh gateway health and dashboard data"
         >
           Refresh
-        </button>
+        </button>}
       </div>
       {resource.message && !health && (
         <p className={`resource-message${resource.status === 'error' || resource.status === 'unavailable' ? ' resource-message--warning' : ''}`} role={resource.status === 'error' ? 'alert' : 'status'}>{resource.message}</p>

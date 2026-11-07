@@ -24,7 +24,8 @@
     "dev:dashboard": "npm run dev --workspace=packages/dashboard",
     "seed": "npm run seed --workspace=packages/gateway",
     "simulate": "npm run start --workspace=packages/simulator",
-    "deploy:testnet": "node scripts/deploy_testnet.cjs"
+    "deploy:testnet": "node scripts/deploy_testnet.cjs",
+    "keygen": "node scripts/keygen.mjs"
   },
   "engines": {
     "node": ">=24.0.0"

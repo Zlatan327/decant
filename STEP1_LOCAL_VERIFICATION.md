@@ -1,6 +1,6 @@
 # Step 1: Local End-to-End Verification Checklist
 
-This tracking document guides you through validating the **Decant Decentralized Compute Gateway**, the **Operator Console UI**, and **Live Gemini AI Streaming** on your local machine.
+This tracking document guides you through validating the **Decant Decentralized Compute Gateway**, the **Operator Console UI**, **Web3 Wallet & Operator Logins**, and **Multi-Model Gemini AI Streaming** on your local machine.
 
 Both the gateway server and dashboard are running in the background.
 
@@ -14,8 +14,9 @@ Both the gateway server and dashboard are running in the background.
 | **Gateway Proxy** | [http://127.0.0.1:8080](http://127.0.0.1:8080) | High-throughput reverse proxy & ACID ledger |
 | **Gateway Health** | [http://127.0.0.1:8080/health](http://127.0.0.1:8080/health) | Live runtime diagnostic probe |
 | **Operator Admin Key** | `5936c9888d1fd329b49f1d0b34c3a4b6803bf9b0aec1e99008d82ee8d28c4bcc` | Unlocks operator mutations & ledger audit |
-| **Active Provider Model** | `gemini-3.5-flash` | Live Google Gemini streaming model |
+| **Supported AI Models** | `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.8-flash` | Live Google Gemini streaming models |
 | **Deployed NEAR Contract** | [`shylibrary4027.testnet`](https://testnet.nearblocks.io/address/shylibrary4027.testnet) | Live on-chain quota & intent registry |
+| **Testnet Account ID** | `shylibrary4027.testnet` | 11.99 NEAR funded testnet account |
 
 ---
 
@@ -26,102 +27,108 @@ Mark each checkbox `[x]` as you test each capability.
 ### 1. Gateway Runtime Health
 - [x] **Gateway Server Started**: Running on `http://127.0.0.1:8080` (PID managed).
 - [x] **Database Seeded**: Persistent SQLite initialized at `data/decant.db` with active and depleted demo sessions.
-- [x] **Health Check Verified**: `/health` reports `status: healthy`, `inferenceConfigured: true`, `models: [gemini-3.5-flash]`, and `ledger: sqlite-acid-persistent`.
+- [x] **Multi-Model Health Verified**: `/health` reports `status: healthy`, `inferenceConfigured: true`, `models: [gemini-3.5-flash, gemini-3.5-flash-lite, gemini-3.8-flash]`, and `ledger: sqlite-acid-persistent`.
 
 ### 2. Browser Dashboard Navigation
 - [ ] **Open Dashboard**: Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
-- [ ] **Check Health Badge**: Top navigation bar should display a green `HEALTHY` pill with `127.0.0.1:8080`.
+- [ ] **Check Health Badge**: Top navigation bar displays a green `HEALTHY` pill with gateway status.
 - [ ] **Explore "How to Use" Tab**:
-  - Click **How to Use** in the left sidebar nav.
+  - Click **How to Use** in the sidebar.
   - Review the **Operator Console vs. Autonomous Agent** two-sided platform architecture.
-  - Click through the 6 workflow step cards (Session Keygen, NEAR Staking, Operator Connect, Prompt Stream, Atomic Debit, Accounting).
-  - Verify quick-action routing buttons (e.g. *Inspect Sessions*, *Launch Inference*, *Review Ledger*).
+  - Click through the 6 workflow step cards and action buttons.
 
-### 3. Operator Authentication
-- [ ] **Connect Operator Key**:
-  - In the top navigation bar, locate the **Operator Key** input field.
-  - Paste your key:
-    ```
-    5936c9888d1fd329b49f1d0b34c3a4b6803bf9b0aec1e99008d82ee8d28c4bcc
-    ```
-  - Click **Connect**.
-  - Verify the indicator turns green: **Operator Connected (Memory-Only)**.
+### 3. Comprehensive Authentication & Logins ("Connect Identity / Wallet")
+- [ ] **Open Auth Modal**:
+  - In the top navigation bar, click the **⚡ Connect Identity / Wallet** pill.
+- [ ] **Test NEAR Web3 Wallet Sign-In**:
+  - In the **Ⓝ NEAR Web3 Wallet** tab, click **Connect shylibrary4027.testnet (Deployed Contract)** shortcut.
+  - Notice real-time FastNEAR RPC query fetching live balance: `11.99 NEAR`.
+  - Notice on-chain quota inspection: `agent-production-01` (`5,000 / 5,000 units`).
+  - Notice top bar pill updates to: `Ⓝ shylibrary4027.testnet (11.99 N)`.
+- [ ] **Test Operator Admin Sign-In**:
+  - Open modal again, switch to **🛡️ Operator Admin** tab.
+  - Click **Use Local Development Admin Key** and click **Authenticate**.
+  - Notice top bar updates to: `🛡️ Operator Active`.
+- [ ] **Test Disconnect / Switch Role**:
+  - Open modal and click **Disconnect** to verify clean state reset to Guest mode.
 
-### 4. Agent Session Inspection
+### 4. 1-Click Ed25519 Agent Keypair Generator
 - [ ] **Navigate to "Sessions" Tab**:
   - Click **Sessions** in the sidebar.
-  - Verify `agent-alpha-demo` is visible with `85 / 100` remaining quota units (`active`).
-  - Verify `agent-depleted-demo` is visible with `0 / 25` remaining quota units (`exhausted`).
+  - Open the **Register a session** accordion.
+  - Click **⚡ Generate Ed25519 Keypair**.
+  - Verify native Web Crypto generates a valid Base58 public key (`ed25519:...`) and session ID.
+  - Verify the private key card appears with a **Copy** button and a reminder that private keys never leave the client.
 
-### 5. Live AI Inference Streaming (Real Gemini 3.5 Flash)
+### 5. Multi-Model Selection & Inference Playground
 - [ ] **Navigate to "Inference" Tab**:
-  - Click **Inference** in the sidebar.
+  - Notice the **Model Selection Cards**:
+    - `⚡ Gemini 3.5 Flash` (Recommended · High Speed)
+    - `🚀 Gemini 3.5 Flash Lite` (Edge Optimized · Ultra-low latency)
+    - `🧠 Gemini 3.8 Flash` (Next-Gen Reasoning)
+    - `🛠️ Custom Model / DePIN` (Custom upstream endpoint)
+  - Click **Gemini 3.5 Flash Lite** card and verify active badge updates.
+- [ ] **Adjust Output Parameters**:
+  - Move the **Max Tokens** slider (e.g. set to `64` or `128` units).
+  - Move the **Temperature** slider (e.g. `0.7`).
+- [ ] **Test Live Streaming**:
   - Select session: `agent-alpha-demo`.
-  - Select model: `gemini-3.5-flash`.
-  - Select or enter a prompt:
-    > *"Explain the advantage of Decant credit routing"*
-  - Click **Stream Request**.
-- [ ] **Observe Live Streaming**:
-  - Watch tokens render in real time in the terminal box without simulated fallback.
-  - Note response model reported: `gemini-3.5-flash`.
-  - Check the round-trip latency (e.g. ~700-1200ms) and response headers.
+  - Click prompt chip: `⚡ Decant routing` or `🛡️ Solidity contract`.
+  - Click **Stream Live Request**.
+  - Watch tokens render progressively with blinking cursor.
+  - Verify message is saved into the conversational **Thread History** with latency & token stats!
 
 ### 6. Balance Reservation & Atomic Deduction
 - [ ] **Verify Quota Consumption**:
   - Check `agent-alpha-demo` balance after inference.
-  - Notice the quota decreased proportionally to characters generated (`ceil(chars / 4)`).
-  - Confirm available credit updated on screen without needing a hard page refresh.
+  - Notice remaining quota decreased by the exact credit units observed.
+  - Check the telemetry strip: latency ms, tokens/sec throughput, and quota response header.
 
 ### 7. Persistent Accounting & Audit Ledger
 - [ ] **Navigate to "Ledger" Tab**:
   - Click **Ledger** in the sidebar.
-  - Confirm the newly completed inference appears at the top of the transaction history.
-  - Check fields: timestamp, session ID, tokens deducted, latency (ms), and model ID.
+  - Confirm the newly completed inference appears at the top of the transaction history with the selected model ID (`gemini-3.5-flash-lite`).
   - Verify the SQLite database `data/decant.db` has recorded this permanently.
 
 ### 8. Circuit Breaker & Quota Enforcement (HTTP 402)
 - [ ] **Attempt Inference with Depleted Session**:
   - Return to **Inference**.
   - Switch session to `agent-depleted-demo` (0 remaining quota).
-  - Click **Stream Request**.
+  - Click **Stream Live Request**.
   - Confirm the gateway halts the request immediately with **HTTP 402 Payment Required: Insufficient compute quota**.
 - [ ] **Top-Up Session (Operator Action)**:
   - In **Sessions**, click **Top-up Quota** for `agent-depleted-demo`.
   - Add `50` units.
   - Verify status switches from `exhausted` to `active` with 50 available units.
 
+### 9. On-Chain NEAR Contract Inspector
+- [ ] **Inspect Live Contract**:
+  - In **Overview** or **Routing**, inspect the **NEAR Testnet Smart Contract** card.
+  - Click **Query Contract** for `agent-production-01`.
+  - Verify live RPC response: `5000 / 5000 units` owned by `shylibrary4027.testnet`.
+  - Click the NearBlocks Explorer link to open the contract on-chain.
+
 ---
 
 ## 🛠️ CLI Quick Test (Optional Headless Validation)
 
-If you prefer testing from your terminal alongside the browser:
-
 ```powershell
-# 1. Probe health
+# 1. Probe health showing all enabled models
 Invoke-RestMethod -Uri http://127.0.0.1:8080/health
 
-# 2. Run automated live simulator (real Gemini inference + token debit)
-npm run simulate
-
-# 3. Query on-chain quota from the live NEAR contract
-node -e "
-const { JsonRpcProvider } = require('near-api-js');
-const provider = new JsonRpcProvider({ url: 'https://test.rpc.fastnear.com' });
-provider.query({
-  request_type: 'call_function',
-  account_id: 'shylibrary4027.testnet',
-  method_name: 'get_quota',
-  args_base64: Buffer.from(JSON.stringify({ session_id: 'agent-production-01' })).toString('base64'),
-  finality: 'final'
-}).then(r => console.log(JSON.parse(Buffer.from(r.result).toString())));
-"
+# 2. Test live streaming with gemini-3.5-flash-lite
+Invoke-RestMethod -Uri http://127.0.0.1:8080/v1/chat/completions -Method Post -Headers @{
+  "X-Decant-Admin-Key"="5936c9888d1fd329b49f1d0b34c3a4b6803bf9b0aec1e99008d82ee8d28c4bcc";
+  "X-Decant-Session"="agent-alpha-demo";
+  "Content-Type"="application/json"
+} -Body '{"model":"gemini-3.5-flash-lite","max_tokens":40,"messages":[{"role":"user","content":"Say hi in 3 words"}]}'
 ```
 
 ---
 
 ## 🏁 Completion Criteria
 
-Once all items above are checked, **Step 1 (Local Visual & E2E Validation)** is complete. 
+Once all items above are checked, **Step 1 (Local Visual & E2E Validation)** is completely hardened and verified.
 
 Proceed to **Step 2 (Cloud Production Deployment)**:
 1. Containerize or package Gateway for Railway / Render / Fly.io with SQLite persistent storage.
