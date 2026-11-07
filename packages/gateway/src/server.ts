@@ -16,19 +16,26 @@ import type { AddressInfo } from "node:net";
 import { DecantLedger } from "./db.js";
 import { DecantCrypto } from "./crypto.js";
 import { DecantComputeEngine } from "./compute-engine.js";
-import { enforceRateLimit, enforcePayloadSize } from "./policy.js";
+import { enforceRateLimitDistributed, enforcePayloadSize } from "./policy.js";
+import { DecantRedisClient } from "./redis.js";
+import { DecantConnectionPooler } from "./pooler.js";
 
 export interface GatewayServerOptions {
   port?: number;
   dbPath?: string;
   /** Operator credential. If absent, operator-only routes fail closed. */
   adminKey?: string;
+  nodeId?: string;
+  redisUrl?: string;
 }
 
 export class DecantGatewayServer {
   public readonly server: Server;
   public readonly ledger: DecantLedger;
   public readonly compute: DecantComputeEngine;
+  public readonly redis: DecantRedisClient;
+  public readonly pooler: DecantConnectionPooler;
+  public readonly nodeId: string;
   private port: number;
   private assignedPort: number = 0;
   private readonly activeRequests = new Set<string>();
@@ -39,6 +46,13 @@ export class DecantGatewayServer {
     this.ledger = new DecantLedger(opts.dbPath ?? (process.env["DATABASE_URL"] ?? ":memory:"));
     this.compute = new DecantComputeEngine();
     this.adminKey = opts.adminKey ?? process.env["DECANT_ADMIN_KEY"];
+    this.nodeId = opts.nodeId ?? (process.env["NODE_ID"] || "server-1");
+    this.redis = new DecantRedisClient(opts.redisUrl ?? process.env["REDIS_URL"]);
+    this.pooler = new DecantConnectionPooler(opts.dbPath ?? process.env["DATABASE_URL"]);
+
+    if (this.redis.isConfigured()) {
+      this.redis.connect().catch(() => {});
+    }
 
     try {
       if (this.ledger.listSolvers().length === 0) {
@@ -74,7 +88,7 @@ export class DecantGatewayServer {
       "Access-Control-Allow-Origin": allowOrigin,
       "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Decant-Session, X-Decant-Signature, X-Decant-Timestamp, X-Decant-Public-Key, X-Decant-Admin-Key",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Expose-Headers": "X-Decant-Session, X-Decant-Quota-Remaining, X-Decant-Public-Key",
+      "Access-Control-Expose-Headers": "X-Decant-Session, X-Decant-Quota-Remaining, X-Decant-Public-Key, X-Decant-Node-Id",
     };
   }
 
@@ -83,6 +97,7 @@ export class DecantGatewayServer {
     const cors = this.getCorsHeaders(req);
     res.writeHead(status, {
       "Content-Type": "application/json",
+      "X-Decant-Node-Id": this.nodeId,
       ...cors,
       ...extraHeaders,
     });
@@ -132,7 +147,7 @@ export class DecantGatewayServer {
     return actual.length === expected.length && timingSafeEqual(actual, expected);
   }
 
-  private authorizeSession(req: IncomingMessage, res: ServerResponse, sessionId: string, body: string): boolean {
+  private async authorizeSession(req: IncomingMessage, res: ServerResponse, sessionId: string, body: string): Promise<boolean> {
     const session = typeof sessionId === "string" ? this.ledger.getSession(sessionId) : null;
     if (!session) {
       this.sendJson(res, 401, { error: "Unauthorized — session is not registered" }, {}, req);
@@ -151,7 +166,21 @@ export class DecantGatewayServer {
       return false;
     }
     if (!DecantCrypto.verifySignature(session.publicKey, signature, req.method ?? "GET",
-      new URL(req.url ?? "/", "http://localhost").pathname, timestamp, body, sessionId) || !this.ledger.claimSignature(signature, timestamp)) {
+      new URL(req.url ?? "/", "http://localhost").pathname, timestamp, body, sessionId)) {
+      this.sendJson(res, 403, { error: "Forbidden — invalid or replayed signature" }, {}, req);
+      return false;
+    }
+
+    // Distributed replay protection via Redis (if connected)
+    if (this.redis.isConnected()) {
+      const freshInRedis = await this.redis.claimSignature(signature, 60);
+      if (!freshInRedis) {
+        this.sendJson(res, 403, { error: "Forbidden — invalid or replayed signature" }, {}, req);
+        return false;
+      }
+    }
+
+    if (!this.ledger.claimSignature(signature, timestamp)) {
       this.sendJson(res, 403, { error: "Forbidden — invalid or replayed signature" }, {}, req);
       return false;
     }
@@ -212,12 +241,19 @@ export class DecantGatewayServer {
       if (pathname === "/v1/health" || pathname === "/health") {
         this.sendJson(res, 200, {
           status: "healthy",
+          nodeId: this.nodeId,
           uptime: process.uptime(),
-          ledger: "sqlite-acid-persistent",
+          ledger: this.pooler.isPoolerActive() ? "postgres-pgbouncer-pool" : "sqlite-acid-persistent",
           nearSync: "not-connected",
           models: this.compute.models,
           inferenceConfigured: this.compute.configured,
           metering: "ceil(characters / 4), estimated credit units",
+          cluster: {
+            nodeId: this.nodeId,
+            loadBalanced: Boolean(process.env["LOAD_BALANCER_ACTIVE"] || process.env["NODE_ID"]),
+            redis: this.redis.getHealth(),
+            pooler: this.pooler.getHealth(),
+          },
           timestamp: Date.now(),
         }, {}, req);
         return;
@@ -230,8 +266,8 @@ export class DecantGatewayServer {
           this.sendJson(res, 401, { error: "Unauthorized — missing X-Decant-Session header" }, {}, req);
           return;
         }
-        if (!this.authorizeSession(req, res, sessionId, "")) return;
-        if (!enforceRateLimit(req, res)) return;
+        if (!(await this.authorizeSession(req, res, sessionId, ""))) return;
+        if (!(await enforceRateLimitDistributed(req, res, this.redis))) return;
 
         this.sendJson(res, 200, {
           echo: true,
@@ -250,8 +286,8 @@ export class DecantGatewayServer {
         }
         if (!enforcePayloadSize(req, res)) return;
         const raw = await this.parseBody(req, 4 * 1024);
-        if (!this.authorizeSession(req, res, sessionId, raw)) return;
-        if (!enforceRateLimit(req, res)) return;
+        if (!(await this.authorizeSession(req, res, sessionId, raw))) return;
+        if (!(await enforceRateLimitDistributed(req, res, this.redis))) return;
         this.sendJson(res, 200, {
           echo: true,
           method: "POST",
@@ -366,7 +402,7 @@ export class DecantGatewayServer {
             claimedUnits: 1000,
             message: "1,000 developer testnet credits added successfully",
           }, {}, req);
-        } catch (err) {
+        } catch (err: any) {
           this.sendJson(res, 500, { error: err.message }, {}, req);
         }
         return;
@@ -380,7 +416,7 @@ export class DecantGatewayServer {
 
       if (/^\/v1\/sessions\/[^/]+$/.test(pathname) && method === "GET") {
         const sessionId = decodeURIComponent(pathname.split("/")[3]);
-        if (!this.authorizeSession(req, res, sessionId, "")) return;
+        if (!(await this.authorizeSession(req, res, sessionId, ""))) return;
         const session = this.ledger.getSession(sessionId);
         if (!session) {
           this.sendJson(res, 404, { error: `Session '${sessionId}' not found` }, {}, req);
@@ -483,7 +519,7 @@ export class DecantGatewayServer {
           this.sendJson(res, 400, { error: "Expected a JSON object" }, {}, req); return;
         }
         const { sessionId, model, maxBudget } = body;
-        if (!this.authorizeSession(req, res, sessionId, rawBody)) return;
+        if (!(await this.authorizeSession(req, res, sessionId, rawBody))) return;
 
         if (!sessionId || !maxBudget) {
           this.sendJson(res, 400, { error: "Missing required fields: sessionId, maxBudget" }, {}, req);
@@ -638,8 +674,8 @@ export class DecantGatewayServer {
 
         const rawBody = await this.parseBody(req, 4 * 1024);
 
-        if (!this.authorizeSession(req, res, sessionId, rawBody)) return;
-        if (!enforceRateLimit(req, res)) return;
+        if (!(await this.authorizeSession(req, res, sessionId, rawBody))) return;
+        if (!(await enforceRateLimitDistributed(req, res, this.redis))) return;
 
         const session = this.ledger.getSession(sessionId)!;
         let payload: any;
@@ -698,6 +734,7 @@ export class DecantGatewayServer {
                 if (!res.headersSent) res.writeHead(200, { ...this.getCorsHeaders(req),
                   "Content-Type": "text/event-stream", "Cache-Control": "no-cache",
                   "X-Decant-Session": sessionId,
+                  "X-Decant-Node-Id": this.nodeId,
                   "X-Decant-Quota-Remaining": this.ledger.getSession(sessionId)!.remainingQuota.toString() });
                 res.write(`data: ${JSON.stringify({ id: requestId, object: "chat.completion.chunk",
                   model: event.model, choices: [{ index: 0, delta: { content: event.token }, finish_reason: null }] })}\n\n`);
@@ -718,6 +755,7 @@ export class DecantGatewayServer {
             }, {}, req);
           }
         } catch (error: any) {
+          console.error('[gateway] inference error:', error);
           try { settle(); } catch {
             if (res.headersSent) res.destroy();
             else this.sendJson(res, 500, { error: "Settlement requires operator review", requestId }, {}, req);
@@ -761,6 +799,10 @@ export class DecantGatewayServer {
   }
 
   public async stop(): Promise<void> {
+    this.redis.disconnect();
+    if (typeof (this.server as any).closeAllConnections === "function") {
+      (this.server as any).closeAllConnections();
+    }
     return new Promise((resolve, reject) => {
       this.server.close((err) => (err ? reject(err) : resolve()));
       this.ledger.close();

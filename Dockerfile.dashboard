@@ -1,0 +1,15 @@
+FROM node:24-alpine AS builder
+WORKDIR /app
+
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY packages/dashboard/package.json ./packages/dashboard/
+
+RUN npm ci --workspace=@decant/dashboard
+
+COPY packages/dashboard ./packages/dashboard
+RUN npm run build:dashboard
+
+FROM nginx:alpine AS runner
+COPY --from=builder /app/packages/dashboard/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

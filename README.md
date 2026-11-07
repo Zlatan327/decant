@@ -21,6 +21,12 @@ Set a strong `DECANT_ADMIN_KEY` in `.env`. Configure `UPSTREAM_BASE_URL` and `UP
 npm run dev:gateway
 # In a second terminal:
 npm run dev:dashboard
+
+# Or run the high-availability 3-node cluster with local load balancer:
+npm run dev:cluster
+
+# Or deploy the complete 7-tier stack via Docker:
+docker compose up
 ```
 
 Open `http://localhost:3000`. Enter the operator key in the console, then register a session using an agent's Ed25519 public key and a positive integer credit allowance. Select a session and run inference. The model selector uses the gateway's configured model list. Session registration and topups are operator allocations, not purchases or on-chain deposits.
@@ -192,6 +198,40 @@ When autonomous agents need multi-provider routing or solver competition:
    ```
 2. **Solver Matching:** DePIN compute nodes and solver networks inspect the open intent registry and submit a fill commitment.
 
+
+## High-Availability Production Architecture (NEAR Legion Blueprint)
+
+Decant adopts the production blueprint for scalable agent gateways:
+
+```text
+[ Frontend: Web / Mobile ] ──────────────▶ [ CDN: Static Assets ]
+             │
+             ▼
+     [ Load Balancer (Nginx) ]
+             │
+   ┌─────────┼─────────┐
+   ▼         ▼         ▼
+[Server 1] [Server 2] [Server 3] (Decant Gateway Nodes)
+   │         │         │
+   ├─────────┴─────────┼──────────────────────────┐
+   ▼                                              ▼
+[ Connection Pooler (PgBouncer) ]         [ Redis Cache ]
+   │                                        - Distributed Rate Limiting
+   ▼                                        - Replay Nonce Cache
+[ Database (PostgreSQL) ]
+```
+
+### Architectural Tiers & Responsibilities:
+
+| Layer | Component | Implementation | Role in Decant |
+|---|---|---|---|
+| **Frontend & CDN** | Static Web/Mobile Assets | Vite React SPA + Nginx / CDN | Compiles the operator dashboard with immutable asset hashing (`Cache-Control: public, max-age=31536000`), delivering sub-50ms edge load times for operators. |
+| **Load Balancer** | Reverse Proxy | Nginx / `scripts/cluster.mjs` | Routes traffic across gateway nodes using least-connections. Crucially configured with `proxy_buffering off` to stream LLM tokens via Server-Sent Events (SSE) with zero latency. |
+| **Backend Cluster** | Clustered Gateway Nodes | Node.js 24 (`Server 1, 2, 3`) | Stateless, horizontally scaled gateway instances with independent `NODE_ID` tags and health telemetry (`/health`). |
+| **Distributed Cache** | Cache & Replay Protection | Redis 7 | Enforces atomic token-bucket rate limits across all gateway nodes simultaneously. Stores `SHA256(signature)` with 60s TTL for sub-millisecond replay-attack rejection. |
+| **Connection Pooler** | Transaction Pooler | PgBouncer (`port 6432`) | Manages database connections using transaction-level pooling (`pool_mode = transaction`), preventing connection exhaustion when parallel agents execute intensive inference workloads. |
+| **Relational Database**| Persistent Relational DB | PostgreSQL (`deploy/postgres/init.sql`) | Persistent double-entry credit ledger, intent registry, and solver reputation tables. Enforces atomic balance reservations and refunds. |
+
 ## Request authorization
 
 - Health is public. Operator listings and management routes require `X-Decant-Admin-Key`. Missing operator configuration fails closed.
@@ -232,6 +272,7 @@ The Rust contract source restricts quota mutations to its owner and intent creat
 
 ```sh
 npm test
+npm run test:cluster
 npm run build --workspace=packages/gateway
 npm run build --workspace=packages/agent-sdk
 npm run build:dashboard

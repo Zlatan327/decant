@@ -1,0 +1,24 @@
+FROM node:24-alpine AS base
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/gateway/package.json ./packages/gateway/
+COPY packages/agent-sdk/package.json ./packages/agent-sdk/
+COPY packages/dashboard/package.json ./packages/dashboard/
+COPY packages/simulator/package.json ./packages/simulator/
+
+RUN npm ci --workspace=@decant/gateway
+
+# Copy gateway sources and build
+COPY packages/gateway ./packages/gateway
+RUN npm run build --workspace=@decant/gateway
+
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=8080
+
+EXPOSE 8080
+
+CMD ["node", "packages/gateway/dist/proxy.js"]

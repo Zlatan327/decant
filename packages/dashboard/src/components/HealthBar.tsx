@@ -21,6 +21,7 @@ function healthTone(resource: ApiResource<GatewayHealth>): string {
 
 function ledgerLabel(ledger: string | undefined): string {
   if (!ledger) return '—';
+  if (ledger.includes('pgbouncer')) return 'PgBouncer + Postgres';
   return ledger.toLowerCase().includes('sqlite-acid-persistent') ? 'SQLite ACID' : ledger;
 }
 
@@ -34,6 +35,9 @@ export function HealthBar({ resource, now, apiTarget, onRefresh, showRefresh = t
   const stateLabel = health?.status.toUpperCase()
     ?? (resource.status === 'loading' ? 'CONNECTING' : resource.status === 'error' ? 'UNAVAILABLE' : 'AWAITING HEALTH');
 
+  const activeNode = health?.cluster?.nodeId ?? health?.nodeId ?? 'standalone';
+  const redisState = health?.cluster?.redis?.connected ? 'CONNECTED' : (health?.cluster?.redis?.configured ? 'CONNECTING' : 'IN-MEMORY');
+
   return (
     <section className="health-rail panel" aria-label="Gateway health" {...targetAttributes('gateway-health-rail', 'status')}>
       <div className="health-rail__identity">
@@ -44,6 +48,14 @@ export function HealthBar({ resource, now, apiTarget, onRefresh, showRefresh = t
         </div>
       </div>
       <div className="health-rail__metrics">
+        <div className="health-metric" {...targetAttributes('gateway-node-id', 'status')}>
+          <span className="metric-label">Cluster node</span>
+          <strong className="mono" style={{ color: '#00EC97' }}>{health ? activeNode.toUpperCase() : '—'}</strong>
+        </div>
+        <div className="health-metric" {...targetAttributes('gateway-redis-cache', 'status')}>
+          <span className="metric-label">Redis cache</span>
+          <strong className="mono">{health ? redisState : '—'}</strong>
+        </div>
         <div className="health-metric" {...targetAttributes('gateway-uptime', 'status')}>
           <span className="metric-label">Uptime</span>
           <strong className="mono">{health ? formatUptime(uptime) : '—'}</strong>

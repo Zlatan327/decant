@@ -11,6 +11,13 @@ export interface GatewayHealth {
   ledger: string;
   nearSync: string;
   timestamp?: number;
+  nodeId?: string;
+  cluster?: {
+    nodeId?: string;
+    loadBalanced?: boolean;
+    redis?: { configured: boolean; connected: boolean; url?: string; pingMs?: number };
+    pooler?: { configured: boolean; type: string; poolMode: string };
+  };
 }
 
 export interface SessionRecord {

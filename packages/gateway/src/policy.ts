@@ -109,6 +109,34 @@ export function enforceRateLimit(
 }
 
 /**
+ * Distributed rate limiter.
+ * If a connected Redis client is supplied, verifies and decrements quota atomically in Redis.
+ * Falls back transparently to in-memory token-bucket check.
+ */
+export async function enforceRateLimitDistributed(
+  req: IncomingMessage,
+  res: ServerResponse,
+  redisClient?: { isConnected: () => boolean; checkRateLimit: (sessionId: string, max: number, windowMs: number) => Promise<{ allowed: boolean }> }
+): Promise<boolean> {
+  const sessionId = req.headers[HEADER_SESSION] as string;
+  if (!sessionId) return true; // Session enforcement handles missing keys
+
+  if (redisClient && redisClient.isConnected()) {
+    const maxTokens = getRateLimitMax();
+    const refillInterval = getRateLimitWindowMs();
+    const result = await redisClient.checkRateLimit(sessionId, maxTokens, refillInterval);
+    if (!result.allowed) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Too Many Requests — rate limit exceeded" }));
+      return false;
+    }
+    return true;
+  }
+
+  return enforceRateLimit(req, res);
+}
+
+/**
  * Payload size guard.
  * Returns `true` if the Content-Length is within bounds; writes 413 otherwise.
  */
