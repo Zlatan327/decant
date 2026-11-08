@@ -11,19 +11,13 @@ interface Provider {
   model?: string;
 }
 
-interface ProtocolLayer {
-  label: string;
-  detail: string;
-  section: DashboardSection;
-}
-
 export interface CentralMinimalistHeroProps {
   onNavigate?: (section: DashboardSection, model?: string) => void;
 }
 
 function brandMark(icon: SimpleIcon, color: string): ReactNode {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 24 24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
       <path d={icon.path} fill={color} />
     </svg>
   );
@@ -32,120 +26,115 @@ function brandMark(icon: SimpleIcon, color: string): ReactNode {
 const PROVIDERS: Provider[] = [
   {
     id: 'gemini',
-    label: 'Gemini',
-    mark: brandMark(siGooglegemini, '#9A83BD'),
+    label: 'gemini',
+    mark: brandMark(siGooglegemini, '#ffffff'),
     section: 'request',
     model: 'gemini-3.8-flash',
   },
   {
     id: 'llama',
-    label: 'Meta Llama',
-    mark: brandMark(siMeta, '#73A8E8'),
+    label: 'llama',
+    mark: brandMark(siMeta, '#ffffff'),
     section: 'request',
     model: 'meta-llama/Meta-Llama-3-8B-Instruct',
   },
   {
     id: 'openai',
-    label: 'OpenAI',
-    mark: <img src="/brand/openai-wordmark.svg" alt="" />,
+    label: 'openai',
+    mark: (
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+        <path d="M22.28 9.38a5.98 5.98 0 0 0-.52-4.91 6.05 6.05 0 0 0-6.51-2.9 6.06 6.06 0 0 0-4.63-2.07 6.13 6.13 0 0 0-5.83 4.25 6.04 6.04 0 0 0-3.9 2.83 6.08 6.08 0 0 0 .74 7.15 6.04 6.04 0 0 0 .52 4.9 6.06 6.06 0 0 0 6.52 2.9 6.04 6.04 0 0 0 4.62 2.07 6.13 6.13 0 0 0 5.83-4.25 6.03 6.03 0 0 0 3.9-2.83 6.07 6.07 0 0 0-.74-7.15z" />
+      </svg>
+    ),
     section: 'request',
     model: 'gpt-4o',
   },
   {
-    id: 'anthropic',
-    label: 'Claude',
-    mark: brandMark(siAnthropic, '#D6B899'),
+    id: 'claude',
+    label: 'claude',
+    mark: brandMark(siAnthropic, '#ffffff'),
     section: 'request',
     model: 'claude-3-5-sonnet',
   },
 ];
 
-const PROTOCOL_LAYERS: ProtocolLayer[] = [
-  { label: 'Settlement', detail: 'NEAR Protocol', section: 'value' },
-  { label: 'Compute', detail: 'Solver network', section: 'routing' },
-  { label: 'Accounting', detail: 'Persistent ledger', section: 'accounting' },
-  { label: 'Identity', detail: 'Scoped session keys', section: 'identity' },
-];
-
 export function CentralMinimalistHero({ onNavigate }: CentralMinimalistHeroProps = {}) {
   return (
-    <section className="minimalist-hero" {...targetAttributes('decant-minimalist-hero', 'panel')}>
-      <div className="minimalist-hero__glow" aria-hidden="true" />
-      <div className="minimalist-hero__inner">
-        <div className="minimalist-hero__eyebrow">
-          <span>DECANT <i>/</i> COMPUTE ROUTING</span>
-          <span className="minimalist-hero__eyebrow-index">BUILT ON NEAR</span>
-        </div>
+    <div className="found-hero" {...targetAttributes('decant-hero-section', 'panel')}>
+      {/* ── Giant Centered Wordmark ── */}
+      <div className="found-wordmark" aria-hidden="true">
+        decant
+      </div>
 
-        <div className="minimalist-hero__copy">
-          <h1 className="minimalist-hero__headline">
-            Compute, routed.<br />
-            <em>Credits, settled.</em>
-          </h1>
-          <p className="minimalist-hero__lead">
-            One gateway for AI inference, scoped compute credits, and clear usage records. NEAR settlement is being connected.
-          </p>
-          <div className="minimalist-hero__actions">
-            <button
-              type="button"
-              className="button button--primary hero-shop-cta"
-              onClick={() => onNavigate?.('shop')}
-            >
-              🛍️ Open Compute Store (Browse & Order)
-            </button>
-            <button
-              type="button"
-              className="button button--secondary"
-              onClick={() => onNavigate?.('request')}
-            >
-              ⚡ Live Playground
-            </button>
+      {/* ── Floating Glass Telemetry Card ── */}
+      <div
+        className="found-card"
+        onClick={() => onNavigate?.('routing')}
+        role="button"
+        tabIndex={0}
+        title="View live solver telemetry & routing intents"
+      >
+        <div className="found-card__header">
+          <div className="found-card__title">Support the solvers</div>
+          <div className="found-card__sub">route with an agent</div>
+        </div>
+        <div className="found-card__footer">
+          <div className="found-card__status">
+            <span>LIVE</span>
+            <span>NEAR LEGION</span>
+          </div>
+          <div className="found-card__progress">
+            <div className="found-card__progress-fill" style={{ width: '46%' }} />
           </div>
         </div>
+      </div>
 
-        <div className="minimalist-hero__providers">
-          <div className="minimalist-hero__section-label">
-            <span>MODEL PROVIDERS</span>
-            <span>Choose a route <i>·</i> select a model</span>
-          </div>
-          <div className="provider-strip" role="list" aria-label="AI model providers">
-            {PROVIDERS.map((provider) => (
-              <button
-                key={provider.id}
-                type="button"
-                className={`provider-link provider-link--${provider.id}`}
-                onClick={() => onNavigate?.(provider.section, provider.model)}
-                aria-label={`Open inference with ${provider.label}`}
-                data-render-target={`provider-${provider.id}`}
-              >
-                <span className="provider-link__mark">{provider.mark}</span>
-                <span className="provider-link__label">{provider.label}</span>
-                <span className="provider-link__arrow" aria-hidden="true">↗</span>
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* ── Editorial Lowercase Headline ── */}
+      <h1 className="found-headline">
+        decentralized<br />intent gateway
+      </h1>
 
-        <div className="protocol-strip" role="list" aria-label="Protocol infrastructure">
-          {PROTOCOL_LAYERS.map((layer) => (
+      {/* ── Lowercase Tagline ── */}
+      <p className="found-tagline">
+        Autonomous AI compute credit routing & settlement on NEAR.
+      </p>
+
+      {/* ── Direct Action & Route Quick-Pills ── */}
+      <div className="found-actions">
+        <button
+          type="button"
+          className="found-action-btn found-action-btn--primary"
+          onClick={() => onNavigate?.('shop')}
+        >
+          open store ↗
+        </button>
+        <button
+          type="button"
+          className="found-action-btn found-action-btn--glass"
+          onClick={() => onNavigate?.('request')}
+        >
+          live inference ⚡
+        </button>
+        <div className="found-routes">
+          {PROVIDERS.map((p) => (
             <button
-              key={layer.label}
+              key={p.id}
               type="button"
-              className="protocol-link"
-              onClick={() => onNavigate?.(layer.section)}
-              role="listitem"
-              aria-label={`${layer.label}: ${layer.detail}`}
+              className="found-route-pill"
+              onClick={() => onNavigate?.(p.section, p.model)}
+              title={`Direct route to ${p.label}`}
             >
-              <span className="protocol-link__label">{layer.label}</span>
-              <span className="protocol-link__detail">{layer.detail}</span>
+              <span className="found-route-pill__mark">{p.mark}</span>
+              <span>{p.label}</span>
             </button>
           ))}
         </div>
-
-        <p className="minimalist-hero__attribution">
-          Provider names and marks are trademarks of their respective owners.
-        </p>
       </div>
-    </section>
+
+      {/* ── Fixed Interaction Hint ── */}
+      <div className="found-hint" aria-hidden="true">
+        Del / Backspace — clear intent · Double-click — inspect solver node
+      </div>
+    </div>
   );
 }

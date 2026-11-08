@@ -27,6 +27,49 @@ interface NavCategory {
   icon: ReactNode;
 }
 
+const CATEGORY_HEADERS: Record<string, { headline: string; tagline: string }> = {
+  overview: {
+    headline: 'decentralized<br />intent gateway',
+    tagline: 'Autonomous AI compute credit routing & settlement on NEAR.'
+  },
+  shop: {
+    headline: 'compute<br />store',
+    tagline: 'Browse verified AI models, select inference tiers, and fund compute sessions.'
+  },
+  request: {
+    headline: 'live<br />inference',
+    tagline: 'Stream tokens with real-time telemetry and atomic credit settlement.'
+  },
+  provider: {
+    headline: 'solver<br />supply',
+    tagline: 'Register compute nodes, stake capacity, and fulfill agent inference requests.'
+  },
+  identity: {
+    headline: 'identity<br />ledger',
+    tagline: 'Manage Ed25519 session keys, allocate credit quotas, and top up balances.'
+  },
+  accounting: {
+    headline: 'settlement<br />audit',
+    tagline: 'Persistent ledger records, solver proof-of-execution, and verifiable transactions.'
+  },
+  value: {
+    headline: 'compute<br />value',
+    tagline: 'Solver credit accrual and verifiable USDT redemption ledger.'
+  },
+  routing: {
+    headline: 'intent<br />registry',
+    tagline: 'Decentralized compute intents, solver bidding, and verified fulfillment commitments.'
+  },
+  guide: {
+    headline: 'protocol<br />guide',
+    tagline: 'Architecture breakdown, session security models, and NEAR contract integration.'
+  },
+  evidence: {
+    headline: 'evidence<br />records',
+    tagline: 'Cryptographic proof logs, validation claims, and state commitments.'
+  }
+};
+
 export function App() {
   const dashboard = useDashboardData();
 
@@ -138,7 +181,7 @@ export function App() {
   const categories: NavCategory[] = [
     {
       id: 'overview',
-      label: 'Overview',
+      label: 'overview',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -150,7 +193,7 @@ export function App() {
     },
     {
       id: 'shop',
-      label: 'Store',
+      label: 'store',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="9" cy="21" r="1" />
@@ -161,7 +204,7 @@ export function App() {
     },
     {
       id: 'request',
-      label: 'Inference',
+      label: 'inference',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="4 17 10 11 4 5" />
@@ -171,7 +214,7 @@ export function App() {
     },
     {
       id: 'provider',
-      label: 'Supply API',
+      label: 'supply',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
@@ -180,7 +223,7 @@ export function App() {
     },
     {
       id: 'identity',
-      label: 'Sessions',
+      label: 'sessions',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" />
@@ -191,7 +234,7 @@ export function App() {
     },
     {
       id: 'accounting',
-      label: 'Ledger',
+      label: 'ledger',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -201,7 +244,7 @@ export function App() {
     },
     {
       id: 'routing',
-      label: 'Routing',
+      label: 'routing',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="6" cy="6" r="3" />
@@ -213,7 +256,7 @@ export function App() {
     },
     {
       id: 'guide',
-      label: 'Guide',
+      label: 'guide',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="9" />
@@ -305,11 +348,7 @@ export function App() {
                 data-render-target="decant-wordmark"
                 data-motion-trigger="none"
               >
-                <span className="brand-mark" aria-hidden="true">
-                  <DecantLogoMark size={20} />
-                </span>
-                <span className="brand-name">DECANT</span>
-                <span className="brand-descriptor">PROTOCOL</span>
+                <span className="logo-word">decant</span>
               </a>
             </div>
 
@@ -327,9 +366,6 @@ export function App() {
                     title={cat.label}
                     data-render-target={`category-tab-${cat.id}`}
                   >
-                    <span className="topbar-tab__icon" aria-hidden="true">
-                      {cat.icon}
-                    </span>
                     <span className={`topbar-tab__label ${isActive ? 'topbar-tab__label--active' : ''}`}>
                       {cat.label}
                     </span>
@@ -349,34 +385,6 @@ export function App() {
                 {healthLabel}
               </span>
 
-              {/* ── Web3 & Identity Connect Pill ── */}
-              <button
-                type="button"
-                className="topbar-auth-btn"
-                onClick={() => setIsAuthModalOpen(true)}
-                title="Manage identity, wallet, or operator connection"
-              >
-                {authState.role === 'near-wallet' && (
-                  <span className="auth-pill-badge auth-pill-badge--near">
-                    Ⓝ {authState.nearAccount?.accountId.slice(0, 16)}… ({authState.nearAccount?.nearBalance} N)
-                  </span>
-                )}
-                {authState.role === 'operator' && (
-                  <span className="auth-pill-badge auth-pill-badge--operator">
-                    🛡️ Operator Active
-                  </span>
-                )}
-                {authState.role === 'agent' && (
-                  <span className="auth-pill-badge auth-pill-badge--agent">
-                    🤖 {authState.agentSessionId?.slice(0, 14)}…
-                  </span>
-                )}
-                {authState.role === 'guest' && (
-                  <span className="auth-pill-badge auth-pill-badge--guest">
-                    ⚡ Connect Identity / Wallet
-                  </span>
-                )}
-              </button>
 
               <button
                 type="button"
@@ -394,30 +402,24 @@ export function App() {
                 onClick={toggleTheme}
                 title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
                 aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-                data-render-target="theme-toggle"
               >
-                {theme === 'dark' ? (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="5" />
-                    <line x1="12" y1="1" x2="12" y2="3" />
-                    <line x1="12" y1="21" x2="12" y2="23" />
-                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                    <line x1="1" y1="12" x2="3" y2="12" />
-                    <line x1="21" y1="12" x2="23" y2="12" />
-                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                  </svg>
-                ) : (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                  </svg>
-                )}
+                {theme === 'dark' ? '☀️' : '🌙'}
               </button>
             </div>
           </header>
 
           <main id="main-content" className="app-main" {...targetAttributes('decant-main-content', 'none')}>
+            {activeSection !== 'overview' && (
+              <header className="category-hero-header">
+                <h1
+                  className="category-hero-header__title"
+                  dangerouslySetInnerHTML={{ __html: CATEGORY_HEADERS[activeSection]?.headline || activeSection }}
+                />
+                <p className="category-hero-header__tagline">
+                  {CATEGORY_HEADERS[activeSection]?.tagline}
+                </p>
+              </header>
+            )}
             {/* ── Section 0: Compute Store (Wholesome Shopping Flow) ── */}
             {activeSection === 'shop' && (
               <div className="workspace-view" key="shop">
