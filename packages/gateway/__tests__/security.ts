@@ -66,7 +66,10 @@ describe("Gateway authorization regressions", () => {
   it("does not credit a registered solver for unassigned model usage", () => {
     const solverId = "registered-solver.testnet";
     assert.deepEqual(gateway.ledger.listSolvers(), []);
-    gateway.ledger.registerSolver({ solverId, isActive: true });
+    gateway.ledger.registerSolver({
+      solverId, endpointUrl: "https://generativelanguage.googleapis.com", modelsSupported: ["provider-model"],
+      pricePerKTokens: 0, reputationScore: 0, isActive: true,
+    });
     gateway.ledger.reserveInference("unassigned-work", agent.sessionId, 10);
     gateway.ledger.settleInference("unassigned-work", 5, 2, 3, "provider-model", 1);
     assert.equal(gateway.ledger.getSolverEarnings(solverId), 0);
@@ -122,12 +125,11 @@ describe("Gateway authorization regressions", () => {
     assert.equal(gateway.ledger.getSolverEarnings("solver.testnet"), 0);
   });
   it("does not mint rewards or burn credits through unconnected payout routes", async () => {
-    gateway.ledger.recordSolverEarnings("solver.testnet", 200);
     for (const action of ["reward", "redeem"]) {
       assert.equal((await post(`/v1/solvers/solver.testnet/${action}`, { amount: 500, credits: 100 },
         { "X-Decant-Admin-Key": adminKey })).status, 503);
     }
-    assert.equal(gateway.ledger.getSolverEarnings("solver.testnet"), 200);
+    assert.equal(gateway.ledger.getSolverEarnings("solver.testnet"), 0);
     assert.deepEqual(gateway.ledger.listRedemptions(), []);
   });
   it("reports disconnected chain state honestly", async () => {

@@ -16,7 +16,6 @@ export interface GatewayHealth {
     nodeId?: string;
     loadBalanced?: boolean;
     redis?: { configured: boolean; connected: boolean; url?: string; pingMs?: number };
-    pooler?: { configured: boolean; type: string; poolMode: string };
   };
 }
 

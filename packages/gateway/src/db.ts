@@ -213,11 +213,11 @@ export class DecantLedger {
       VALUES (?, ?, ?, ?, ?, ?, 'active')
     `);
 
-    stmt.run(cleanSessionId, publicKey.trim(), (ownerAccountId || "agent.testnet").trim(), quota, quota, now);
+    stmt.run(cleanSessionId, publicKey.trim(), ownerAccountId.trim(), quota, quota, now);
     return {
       sessionId: cleanSessionId,
       publicKey: publicKey.trim(),
-      ownerAccountId: (ownerAccountId || "agent.testnet").trim(),
+      ownerAccountId: ownerAccountId.trim(),
       totalQuota: quota,
       remainingQuota: quota,
       createdAt: now,
@@ -255,57 +255,6 @@ export class DecantLedger {
       createdAt: Number(row.created_at),
       status: row.status,
     }));
-  }
-
-  public deductQuota(
-    sessionId: string,
-    costUnits: number,
-    promptTokens: number,
-    completionTokens: number,
-    model: string,
-    latencyMs: number
-  ): { remainingQuota: number; txId: string } {
-    if (!Number.isSafeInteger(costUnits) || costUnits < 0) {
-      throw new Error("Invalid costUnits: must be a non-negative number.");
-    }
-
-    // Atomic SQLite update transaction
-    this.db.exec("BEGIN IMMEDIATE TRANSACTION;");
-    try {
-      const session = this.getSession(sessionId);
-      if (!session) {
-        throw new Error(`Session '${sessionId}' not found.`);
-      }
-
-      if (session.remainingQuota < costUnits) {
-        throw new Error(
-          `Insufficient credit: remaining ${session.remainingQuota}, required ${costUnits}`
-        );
-      }
-
-      const newRemaining = session.remainingQuota - costUnits;
-      const newStatus = newRemaining === 0 ? "exhausted" : "active";
-      const now = Date.now();
-      const txId = `tx_${now}_${Math.random().toString(36).substring(2, 9)}`;
-
-
-      this.db
-        .prepare(`UPDATE sessions SET remaining_quota = ?, status = ? WHERE session_id = ?`)
-        .run(newRemaining, newStatus, sessionId);
-
-      this.db
-        .prepare(`
-          INSERT INTO transactions (tx_id, session_id, prompt_tokens, completion_tokens, cost_units, model, upstream_latency_ms, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `)
-        .run(txId, sessionId, promptTokens, completionTokens, costUnits, model, latencyMs, now);
-
-      this.db.exec("COMMIT;");
-      return { remainingQuota: newRemaining, txId };
-    } catch (err) {
-      this.db.exec("ROLLBACK;");
-      throw err;
-    }
   }
 
   /** Deduct the full authorized ceiling before any upstream work can start. */
@@ -526,42 +475,19 @@ export class DecantLedger {
 
   // ─── Solver Earnings & Compute-to-Value Redemption ───────────────────────
 
-  public recordSolverEarnings(solverId: string, amount: number): number {
-    if (!solverId || typeof solverId !== "string" || !solverId.trim()) {
-      throw new Error("Invalid solverId: must be a non-empty string.");
-    }
-    if (!Number.isSafeInteger(amount) || amount <= 0) {
-      throw new Error("Invalid reward amount: must be a positive number.");
-    }
-
-    const cleanSolverId = solverId.trim();
-    const current = this.getSolverEarnings(cleanSolverId);
-    const newTotal = current + amount;
-    if (!Number.isSafeInteger(newTotal)) throw new Error("Reward exceeds safe integer range");
-    const now = Date.now();
-
-    this.db.prepare(`
-      INSERT INTO solver_earnings (solver_id, earned_credits, updated_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(solver_id) DO UPDATE SET earned_credits = ?, updated_at = ?
-    `).run(cleanSolverId, newTotal, now, newTotal, now);
-
-    return newTotal;
-  }
-
   public getSolverEarnings(solverId: string): number {
     const cleanSolverId = (solverId || "").trim();
     const row = this.db.prepare(`SELECT earned_credits FROM solver_earnings WHERE solver_id = ?`).get(cleanSolverId) as any;
     return row ? Number(row.earned_credits) : 0;
   }
 
-  public registerSolver(solver: Partial<SolverRecord> & { solverId: string }): SolverRecord {
+  public registerSolver(solver: SolverRecord): SolverRecord {
     if (!solver.solverId || !solver.solverId.trim()) throw new Error("solverId is required");
     const cleanId = solver.solverId.trim();
-    const endpoint = solver.endpointUrl || "https://api.decant.internal";
-    const models = JSON.stringify(solver.modelsSupported || ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]);
-    const price = Number(solver.pricePerKTokens) || 1.0;
-    const rep = Number(solver.reputationScore) || 5.0;
+    const endpoint = solver.endpointUrl;
+    const models = JSON.stringify(solver.modelsSupported);
+    const price = Number(solver.pricePerKTokens) || 0;
+    const rep = Number(solver.reputationScore) || 0;
     const active = solver.isActive !== false ? 1 : 0;
 
     this.db.prepare(`
@@ -592,12 +518,11 @@ export class DecantLedger {
     };
   }
 
-  public listSolvers(): (SolverRecord & { earnedCredits: number })[] {
-    const rows = this.db.prepare(`SELECT * FROM solvers ORDER BY reputation_score DESC`).all() as any[];
+  public listSolvers(): SolverRecord[] {
+    const rows = this.db.prepare(`SELECT * FROM solvers ORDER BY solver_id`).all() as any[];
     return rows.map((row) => {
       let models: string[] = [];
       try { models = JSON.parse(row.models_supported); } catch { models = [row.models_supported]; }
-      const earned = this.getSolverEarnings(row.solver_id);
       return {
         solverId: row.solver_id,
         endpointUrl: row.endpoint_url,
@@ -605,7 +530,6 @@ export class DecantLedger {
         pricePerKTokens: Number(row.price_per_k_tokens),
         reputationScore: Number(row.reputation_score),
         isActive: Boolean(row.is_active),
-        earnedCredits: earned,
       };
     });
   }
@@ -613,11 +537,6 @@ export class DecantLedger {
   public setSolverActive(solverId: string, isActive: boolean): void {
     this.db.prepare(`UPDATE solvers SET is_active = ? WHERE solver_id = ?`)
       .run(isActive ? 1 : 0, solverId.trim());
-  }
-
-  /** Retained as an explicit fail-closed boundary for older programmatic callers. */
-  public recordRedemption(_accountId: string, _credits: number): never {
-    throw new Error("USDT payouts are not connected; no credits have been burned");
   }
 
   public listRedemptions(limit: number = 20): any[] {

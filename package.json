@@ -7,7 +7,6 @@
     "packages/contracts",
     "packages/gateway",
     "packages/agent-sdk",
-    "packages/simulator",
     "packages/dashboard"
   ],
   "scripts": {
@@ -15,19 +14,15 @@
     "build:contracts": "npm run build --workspace=packages/contracts",
     "build:dashboard": "npm run build --workspace=packages/dashboard",
     "test": "npm test --workspaces --if-present",
-    "test:wire": "npm test --workspace=packages/gateway",
-    "test:depin": "npm run test:depin --workspace=packages/gateway",
     "test:prod": "npm run test:prod --workspace=packages/gateway",
     "test:cluster": "npm run test:cluster --workspace=@decant/gateway",
     "test:unit:contracts": "npm run test:unit --workspace=packages/contracts",
-    "test:sandbox": "npm run test:sandbox --workspace=packages/contracts",
     "dev:gateway": "npm run dev --workspace=packages/gateway",
     "dev:dashboard": "npm run dev --workspace=packages/dashboard",
     "dev:cluster": "node scripts/cluster.mjs",
-    "seed": "npm run seed --workspace=packages/gateway",
-    "simulate": "npm run start --workspace=packages/simulator",
     "deploy:testnet": "node scripts/deploy_testnet.cjs",
-    "keygen": "node scripts/keygen.mjs"
+    "keygen": "node scripts/keygen.mjs",
+    "settle:testnet": "node scripts/settle_testnet.mjs"
   },
   "engines": {
     "node": ">=24.0.0"

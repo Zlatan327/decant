@@ -46,11 +46,6 @@ export class DecantComputeEngine {
     const list = new Set<string>();
     if (this.defaultModel) list.add(this.defaultModel);
     if (this.geminiModel) list.add(this.geminiModel);
-    if (this.geminiClient) {
-      list.add("gemini-3.5-flash");
-      list.add("gemini-3.5-flash-lite");
-      list.add("gemini-3.8-flash");
-    }
     const extra = (process.env.DECANT_MODELS || process.env.SUPPORTED_MODELS || "")
       .split(",")
       .map(s => s.trim())

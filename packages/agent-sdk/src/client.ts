@@ -91,7 +91,7 @@ export class DecantClient {
   }
 
   public async request(
-    path: string = "/get",
+    path: string = `/v1/sessions/${encodeURIComponent(this.sessionId)}`,
     method: string = "GET",
     body?: string
   ): Promise<{ status: number; body: string; headers: Record<string, string> }> {

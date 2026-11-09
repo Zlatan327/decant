@@ -5,7 +5,7 @@ Working branch: `fix/gateway-auth-credit-enforcement`.
 
 Scope: repair the existing compute gateway, operator console and contract. Keep the product purpose and visual design. No Veyntro implementation is used.
 
-## Implemented and verified locally
+## Earlier implementation and validation
 
 ### 1. Gateway authentication
 
@@ -49,7 +49,7 @@ Scope: repair the existing compute gateway, operator console and contract. Keep 
 - Add GitHub Actions for JavaScript tests/builds, actual Rust tests and the WebAssembly build. The initial published branch passed both GitHub CI jobs.
 - Add the Decant README disclosure naming Isaac's independent Veyntro participation. The reciprocal disclosure in Veyntro remains outside this task's scope.
 
-## Validation
+## Historical validation
 
 - JavaScript: 53 passed, 0 failed, 1 optional external NEAR RPC reachability probe skipped.
 - Gateway and agent SDK TypeScript builds: passed.
@@ -77,3 +77,10 @@ Usage settlement, unused-credit refund and audit insertion share one SQLite tran
 ## Publishing status
 
 Write access is now available. The three initial correction commits are published on `fix/gateway-auth-credit-enforcement`, with pull request [#1](https://github.com/Zlatan327/decant/pull/1). Both initial GitHub CI jobs passed. Follow-up commits use the same review branch; no merge or deployment is implied.
+
+
+## Live-only cleanup
+
+The approved dark console is the only dashboard implementation. The runtime and scripts use a configured provider, real gateway records and explicit testnet RPC reads. Demo data generation, the canned model engine, the JavaScript RPC imitation, and synthetic provider and network servers were removed. Gateway authorization, reservation recovery and SQLite checks remain, along with Rust contract unit tests.
+
+The next release gate is a browser-to-provider stream with the matching SQLite debit and ledger record. NEAR signed settlement, verified solver execution, payout transfers and deployment verification remain separate release gates.

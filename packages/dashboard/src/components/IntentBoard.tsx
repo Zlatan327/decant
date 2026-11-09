@@ -140,7 +140,7 @@ export function IntentBoard({ intents, confirmedIntents, sessions, selectedSessi
         </div>
         <span className="source-badge">Gateway list</span>
       </div>
-      <p className="panel-intro">Open items are returned by the gateway. Enter the intended solver ID to fill one and review the returned status.</p>
+      <p className="panel-intro">Open items are returned by the gateway. Enter a solver ID to record a local assignment. This does not run inference.</p>
 
       <section className="intent-lane intent-lane--primary" aria-labelledby="open-intents-heading" {...targetAttributes('open-intents-lane', 'panel')}>
         <div className="intent-lane__heading"><h3 id="open-intents-heading">Available to fill</h3><span className="mono">{intents.data === null ? '—' : formatNumber(openIntents.length)}</span></div>

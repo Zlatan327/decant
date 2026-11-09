@@ -4,11 +4,10 @@
  * Direct FastNEAR JSON-RPC queries for:
  *   - Account balance (view_account)
  *   - Smart contract quota inspection (call_function: get_quota)
- *   - Open compute intents (call_function: list_open_intents)
- */
+ * */
 
 export const DEFAULT_NEAR_RPC = 'https://test.rpc.fastnear.com';
-export const DEFAULT_CONTRACT_ID = 'shylibrary4027.testnet';
+export const DEFAULT_CONTRACT_ID = import.meta.env.VITE_DECANT_NEAR_CONTRACT_ID?.trim() || '';
 
 export interface NearAccountInfo {
   accountId: string;
@@ -25,16 +24,12 @@ export interface NearContractQuota {
 }
 
 function yoctoToNear(yocto: string): string {
-  try {
-    const raw = BigInt(yocto);
-    const oneNear = BigInt('1000000000000000000000000'); // 1e24
-    const whole = raw / oneNear;
-    const remainder = raw % oneNear;
-    const decimal = remainder.toString().padStart(24, '0').slice(0, 4);
-    return `${whole}.${decimal}`;
-  } catch {
-    return '0.0000';
-  }
+  const raw = BigInt(yocto);
+  const oneNear = BigInt('1000000000000000000000000'); // 1e24
+  const whole = raw / oneNear;
+  const remainder = raw % oneNear;
+  const decimal = remainder.toString().padStart(24, '0').slice(0, 4);
+  return `${whole}.${decimal}`;
 }
 
 export async function fetchNearAccount(
@@ -62,11 +57,14 @@ export async function fetchNearAccount(
   }
 
   const result = json.result;
+  if (!response.ok || typeof result?.amount !== 'string' || !Number.isSafeInteger(result?.block_height)) {
+    throw new Error('NEAR RPC returned an invalid account response');
+  }
   return {
     accountId,
-    nearBalance: yoctoToNear(result.amount ?? '0'),
-    rawAmount: result.amount ?? '0',
-    blockHeight: result.block_height ?? 0,
+    nearBalance: yoctoToNear(result.amount),
+    rawAmount: result.amount,
+    blockHeight: result.block_height,
   };
 }
 
@@ -95,22 +93,16 @@ export async function fetchContractQuota(
   });
 
   const json = await response.json();
-  if (json.error || !json.result || !json.result.result) {
-    return null;
+  if (!response.ok || json.error || !Array.isArray(json.result?.result)) {
+    throw new Error('NEAR RPC could not read the contract quota');
   }
 
-  try {
-    const bytes = new Uint8Array(json.result.result);
-    const decoded = new TextDecoder().decode(bytes);
-    const parsed = JSON.parse(decoded);
-    if (!parsed) return null;
-    return {
-      sessionId: parsed.session_id,
-      owner: parsed.owner,
-      total: Number(parsed.total) || 0,
-      remaining: Number(parsed.remaining) || 0,
-    };
-  } catch {
-    return null;
+  const decoded = new TextDecoder().decode(Uint8Array.from(json.result.result));
+  const parsed = JSON.parse(decoded);
+  if (parsed === null) return null;
+  if (typeof parsed.session_id !== 'string' || typeof parsed.owner !== 'string'
+    || !Number.isSafeInteger(parsed.total) || !Number.isSafeInteger(parsed.remaining)) {
+    throw new Error('NEAR RPC returned an invalid quota record');
   }
+  return { sessionId: parsed.session_id, owner: parsed.owner, total: parsed.total, remaining: parsed.remaining };
 }

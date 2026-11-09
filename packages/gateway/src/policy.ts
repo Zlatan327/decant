@@ -10,28 +10,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-// ─── Phase 1: Session Key Check ────────────────────────────────────────────
-
 const HEADER_SESSION = "x-decant-session";
-
-/**
- * Returns `true` if the request carries a non-empty session key.
- * When it returns `false` it has already written a 401 response.
- */
-export function enforceSession(
-  req: IncomingMessage,
-  res: ServerResponse
-): boolean {
-  const key = req.headers[HEADER_SESSION];
-  if (!key || (Array.isArray(key) && key.length === 0)) {
-    res.writeHead(401, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Unauthorized — missing X-Decant-Session header" }));
-    return false;
-  }
-  return true;
-}
-
-// ─── Phase 2 stubs (wired up in Phase 2) ───────────────────────────────────
 
 export interface TokenBucket {
   tokens: number;
@@ -67,10 +46,6 @@ export function getRateLimitWindowMs(): number {
   }
   return 10_000;
 }
-
-const MAX_TOKENS = 3;
-const REFILL_INTERVAL_MS = 10_000; // 10 seconds
-const MAX_PAYLOAD_BYTES = 4 * 1024; // 4 KB
 
 /**
  * Token-bucket rate limiter.

@@ -22,11 +22,7 @@ npm run dev:gateway
 # In a second terminal:
 npm run dev:dashboard
 
-# Or run the high-availability 3-node cluster with local load balancer:
-npm run dev:cluster
 
-# Or deploy the complete 7-tier stack via Docker:
-docker compose up
 ```
 
 Open `http://localhost:3000`. Enter the operator key in the console, then register a session using an agent's Ed25519 public key and a positive integer credit allowance. Select a session and run inference. The model selector uses the gateway's configured model list. Session registration and topups are operator allocations, not purchases or on-chain deposits.
@@ -62,7 +58,7 @@ The Decant dashboard (`packages/dashboard`) is an operator console and live tele
 
 ### 5. Compute intent marketplace (Routing)
 - **Broadcast intent:** Autonomous agents broadcast compute requirements (target model, credit budget, constraints) to the open registry.
-- **Solver matching:** Review open intents and simulate fulfillment assignments by decentralized solver nodes (e.g. `hyperbolic-solver-01.near`).
+- **Intent registry:** Record and review local assignments. Assignments do not dispatch inference to solvers.
 
 ### 6. Ledger audit and reservation recovery (Ledger)
 - **Double-entry audit log:** Inspect all SQLite ACID transaction records with transaction IDs, unit deductions, top-ups, and timestamps.
@@ -80,7 +76,7 @@ Decant is a two-sided compute gateway: human operators monitor telemetry and all
 │  Side 1: Operator Console (UI)  │           │   Side 2: Autonomous Agents (API)    │
 │  - Real-time telemetry & health │           │  - Cryptographic Ed25519 identity    │
 │  - Session enrollment & top-ups │           │  - Real-time SSE token streaming     │
-│  - Stalled reservation recovery │           │  - Automated intent negotiation      │
+│  - Stalled reservation recovery │           │  - Local intent records             │
 └────────────────┬────────────────┘           └──────────────────┬───────────────────┘
                  │                                               │
                  ▼                                               ▼
@@ -181,11 +177,11 @@ Decant treats compute access like an atomic credit ledger. Rather than invoicing
    * The final `[DONE]` frame is only sent to the agent after the ledger settlement transaction succeeds.
 5. **Circuit Breaker Lockout (`HTTP 402`):**
    * If an agent exhausts its quota (remaining balance < reserved ceiling), the gateway terminates access and responds with `HTTP 402 Payment Required`. No calls reach the model provider.
-   * **Replenishment:** An operator can top up credits via the console/API (`POST /v1/sessions/:id/topup`), or through on-chain NEAR escrow deposits via the smart contract.
+   * **Replenishment:** An operator can top up credits via the console/API (`POST /v1/sessions/:id/topup`), Gateway top-ups update the local ledger.
 
 ---
 
-### 3. Decentralized Intent Broadcasting (Marketplace Routing)
+### 3. Local Intent Registry
 
 When autonomous agents need multi-provider routing or solver competition:
 1. **Broadcast Intent:** The agent posts a signed intent via `POST /v1/intents/broadcast`:
@@ -196,41 +192,12 @@ When autonomous agents need multi-provider routing or solver competition:
      "requirements": "Low latency streaming"
    }
    ```
-2. **Solver Matching:** DePIN compute nodes and solver networks inspect the open intent registry and submit a fill commitment.
+2. **Assignment:** An operator can assign an intent to a registered solver in the local ledger. Live solver dispatch, completion verification, and settlement remain open.
 
 
-## High-Availability Production Architecture (NEAR Legion Blueprint)
+## Deployment
 
-Decant adopts the production blueprint for scalable agent gateways:
-
-```text
-[ Frontend: Web / Mobile ] ──────────────▶ [ CDN: Static Assets ]
-             │
-             ▼
-     [ Load Balancer (Nginx) ]
-             │
-   ┌─────────┼─────────┐
-   ▼         ▼         ▼
-[Server 1] [Server 2] [Server 3] (Decant Gateway Nodes)
-   │         │         │
-   ├─────────┴─────────┼──────────────────────────┐
-   ▼                                              ▼
-[ Connection Pooler (PgBouncer) ]         [ Redis Cache ]
-   │                                        - Distributed Rate Limiting
-   ▼                                        - Replay Nonce Cache
-[ Database (PostgreSQL) ]
-```
-
-### Architectural Tiers & Responsibilities:
-
-| Layer | Component | Implementation | Role in Decant |
-|---|---|---|---|
-| **Frontend & CDN** | Static Web/Mobile Assets | Vite React SPA + Nginx / CDN | Compiles the operator dashboard with immutable asset hashing (`Cache-Control: public, max-age=31536000`), delivering sub-50ms edge load times for operators. |
-| **Load Balancer** | Reverse Proxy | Nginx / `scripts/cluster.mjs` | Routes traffic across gateway nodes using least-connections. Crucially configured with `proxy_buffering off` to stream LLM tokens via Server-Sent Events (SSE) with zero latency. |
-| **Backend Cluster** | Clustered Gateway Nodes | Node.js 24 (`Server 1, 2, 3`) | Stateless, horizontally scaled gateway instances with independent `NODE_ID` tags and health telemetry (`/health`). |
-| **Distributed Cache** | Cache & Replay Protection | Redis 7 | Enforces atomic token-bucket rate limits across all gateway nodes simultaneously. Stores `SHA256(signature)` with 60s TTL for sub-millisecond replay-attack rejection. |
-| **Connection Pooler** | Transaction Pooler | PgBouncer (`port 6432`) | Manages database connections using transaction-level pooling (`pool_mode = transaction`), preventing connection exhaustion when parallel agents execute intensive inference workloads. |
-| **Relational Database**| Persistent Relational DB | PostgreSQL (`deploy/postgres/init.sql`) | Persistent double-entry credit ledger, intent registry, and solver reputation tables. Enforces atomic balance reservations and refunds. |
+Start with one gateway and a durable SQLite volume behind HTTPS. The optional Docker Compose setup runs gateway processes on one host with a shared local SQLite volume, Redis, and an Nginx proxy. Validate storage, recovery, and SSE through the proxy before exposing it. The gateway uses SQLite for credit accounting.
 
 ## Request authorization
 
@@ -266,7 +233,7 @@ Broadcasting records a request; filling assigns a solver. It does not execute th
 
 `POST /v1/solvers/:id/reward` and `/redeem` return 503 for authorized operators until verified workload rewards and a real payout rail are implemented. They do not mint rewards or burn credits. Historical local redemption records, including records previously marked `Settled`, are **not proof of token transfers**. The console labels these unverified.
 
-The Rust contract source restricts quota mutations to its owner and intent creation to the session owner. Reward and redemption calls are disabled until their missing verification/transfer paths exist. It is not deployed or verified by the JavaScript sandbox tests. Existing on-chain deployments, if any, are not changed by editing this repository.
+The Rust contract source restricts quota mutations to its owner and intent creation to the session owner. Reward and redemption calls are disabled until their missing verification/transfer paths exist. Contract source changes require a deployment and receipt verification before they take effect on-chain.
 
 ## Verification
 
@@ -280,11 +247,33 @@ npm run test:unit:contracts
 npm run build:contracts
 ```
 
-`npm test` runs local JavaScript tests. The provider transport tests use an explicitly controlled HTTP fixture to verify credit accounting and failure paths. Legacy sandbox and DePIN transport fixtures simulate state or output for tests only; they do not execute Rust, prove live inference, or transfer tokens. The optional RPC reachability probe runs with `NEAR_LIVE_PROBE=true`; reachability alone does not prove a contract is deployed.
+The JavaScript tests exercise the real gateway and SQLite ledger locally. The contract checks execute the Rust code. A live release requires a separate end-to-end check with a configured provider.
 
-`npm run test:unit:contracts` runs actual Rust unit tests. A GitHub Actions workflow runs local tests, TypeScript builds and Rust validation once this branch is published. See [docs/PROGRESS.md](docs/PROGRESS.md) for verified results and open work.
+1. Use a fresh `DATABASE_PATH` for live validation if an older local database contains demo records. Keep the existing database for review.
+2. Start the gateway and dashboard, sign in as an operator, and register a new session with enough credits for the prompt and output limit.
+3. Send one short prompt in **Inference**. Check that the response streams, one ledger record appears, and the change in the session's balance matches that record.
+4. Verify a depleted session is blocked before the provider call. Record the results without credentials or private keys.
 
-`npm run simulate` is a local harness that requires a configured real model provider. It allocates test credits in an isolated in-memory ledger and makes a real provider request. It does not settle on NEAR or pay USDT. `npm run seed` creates sample records for local development; never use its records as live activity or submission evidence.
+For read-only testnet quota checks, set `VITE_DECANT_NEAR_CONTRACT_ID` to a verified contract account before running or building the dashboard. A quota read is separate from gateway credit settlement.
+
+## NEAR Testnet settlement check
+
+The operator can reconcile a specific settled SQLite inference debit with a signed Testnet write. Use a dedicated Testnet deployment of the contract built from this branch and register the same session ID on-chain with enough quota before submitting. The signer must be the contract owner. Use a Testnet function-call access key restricted to the contract and `settle_inference` for the settlement script.
+
+On the machine that ran the real inference, set these values in the root `.env`:
+
+- `DATABASE_PATH` points to the gateway ledger containing the inference transaction.
+- `NEAR_CONTRACT_ID` is the deployed Testnet contract.
+- `NEAR_ACCOUNT_ID` is the Testnet contract owner.
+- `NEAR_SETTLEMENT_PRIVATE_KEY` is the restricted signing key. Keep it out of Git.
+
+Record the on-chain session quota, then run:
+
+```sh
+npm run settle:testnet -- <ledger-transaction-id>
+```
+
+Save the request ID, session ID, credits, transaction hash and receipt ID from the result. Verify the Testnet quota fell by the same number of credits. An exact retry returns `applied: false` with a receipt for the retry and leaves the quota unchanged. Preserve the original receipt for the first debit. The script uses the FastNEAR Testnet RPC and waits for final execution. It leaves the local inference balance unchanged and does not run automatically on gateway requests.
 
 ## Repository
 
@@ -293,8 +282,7 @@ npm run build:contracts
 | `packages/gateway` | HTTP API, authentication, durable reservations, SQLite accounting, provider streaming |
 | `packages/dashboard` | Existing React/Vite operator console |
 | `packages/agent-sdk` | Session identity, signing and streaming client |
-| `packages/contracts` | Rust NEAR ledger source; separate legacy in-memory RPC test fixture |
-| `packages/simulator` | Explicit local execution harness |
+| `packages/contracts` | Rust NEAR contract and unit tests |
 
 
 ## Independent hackathon participation

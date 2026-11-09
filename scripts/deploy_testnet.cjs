@@ -8,9 +8,12 @@ const { parseSeedPhrase } = require('near-seed-phrase');
 
 async function main() {
   const seedPhrase = process.env.NEAR_SEED_PHRASE;
-  const accountId = process.env.NEAR_ACCOUNT_ID || "shylibrary4027.testnet";
+  const accountId = process.env.NEAR_ACCOUNT_ID;
   const rpcUrl = process.env.NEAR_RPC_URL || "https://test.rpc.fastnear.com";
 
+  if (!accountId?.endsWith(".testnet")) {
+    throw new Error("Set NEAR_ACCOUNT_ID to the intended .testnet deployment account");
+  }
   if (!seedPhrase) {
     throw new Error("Please set NEAR_SEED_PHRASE environment variable");
   }
@@ -65,29 +68,33 @@ async function main() {
         request_type: "call_function",
         finality: "final",
         account_id: accountId,
-        method_name: "get_open_intents",
+        method_name: "list_open_intents",
         args_base64: Buffer.from("{}").toString("base64")
       }
     })
   });
 
   const viewJson = await viewRes.json();
-  if (viewJson.result && viewJson.result.result) {
+  if (viewRes.ok && Array.isArray(viewJson.result?.result)) {
     const output = Buffer.from(viewJson.result.result).toString("utf-8");
     console.log(`   On-chain view query result (open intents): ${output}`);
   } else {
-    console.log(`   View response:`, JSON.stringify(viewJson));
+    throw new Error("Could not verify the deployed contract through the testnet RPC");
   }
 
   console.log(`\n5. Updating .env with contract details...`);
   const envPath = path.resolve(__dirname, '../.env');
-  let envContent = fs.readFileSync(envPath, 'utf8');
+  let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
 
-  if (!envContent.includes('NEAR_CONTRACT_ID=')) {
-    envContent += `\n# NEAR Testnet Contract\nNEAR_CONTRACT_ID=${accountId}\nNEAR_RPC_URL=${rpcUrl}\n`;
-  } else {
-    envContent = envContent.replace(/NEAR_CONTRACT_ID=.*/, `NEAR_CONTRACT_ID=${accountId}`);
-    envContent = envContent.replace(/NEAR_RPC_URL=.*/, `NEAR_RPC_URL=${rpcUrl}`);
+  for (const [key, value] of Object.entries({
+    NEAR_CONTRACT_ID: accountId,
+    NEAR_RPC_URL: rpcUrl,
+    VITE_DECANT_NEAR_CONTRACT_ID: accountId,
+  })) {
+    const entry = new RegExp(`^${key}=.*$`, 'm');
+    envContent = entry.test(envContent)
+      ? envContent.replace(entry, () => `${key}=${value}`)
+      : `${envContent.trimEnd()}\n${key}=${value}\n`;
   }
 
   fs.writeFileSync(envPath, envContent);

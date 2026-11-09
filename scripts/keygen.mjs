@@ -13,7 +13,6 @@
  *   - Ready-to-use TypeScript snippet for @decant/agent-sdk
  */
 
-import { generateKeyPairSync } from "node:crypto";
 import { KeyPair } from "near-api-js";
 
 function generate() {
@@ -37,18 +36,19 @@ function generate() {
   console.log("2. Use this in your autonomous AI agent code:");
   console.log("-------------------------------------------------------");
   console.log(`import { DecantClient } from "@decant/agent-sdk";
+import { KeyPair, KeyPairEd25519 } from "near-api-js";
 
 const client = new DecantClient({
   gatewayUrl: "http://127.0.0.1:8080",
   sessionId: "${sessionId}",
-  privateKey: "${privateKey}",
+  keyPair: KeyPair.fromString(process.env.DECANT_AGENT_PRIVATE_KEY!) as KeyPairEd25519,
   maxOutputUnits: 128,
 });
 
 const stream = await client.streamChat("Hello from autonomous agent!", (token) => {
   process.stdout.write(token);
 });
-console.log("\\nCredit used:", stream.usage?.credit_units);
+console.log("\\nCredit used:", stream.creditUnits);
 `);
   console.log("=======================================================\n");
 }

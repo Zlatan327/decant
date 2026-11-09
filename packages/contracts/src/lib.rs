@@ -37,6 +37,12 @@ pub struct Quota {
     pub remaining: u64,
 }
 
+#[near(serializers = [borsh])]
+struct InferenceDebit {
+    session_id: String,
+    amount: u64,
+}
+
 /// A settlement redemption record converting earned compute credits into spendable USDT value.
 #[near(serializers = [json, borsh])]
 #[derive(Clone)]
@@ -179,6 +185,28 @@ impl DecantContract {
             "Session '{}': consumed {}, remaining {}",
             session_id, amount, quota.remaining
         ));
+    }
+
+    /// Apply one local inference debit once. Returns false for an exact retry.
+    pub fn settle_inference(&mut self, request_id: String, session_id: String, amount: u64) -> bool {
+        self.assert_owner();
+        assert!(!request_id.is_empty() && request_id.len() <= 128, "Invalid request ID");
+        // This namespace is separate from the existing collection prefixes and
+        // leaves the serialized contract state compatible with existing deployments.
+        let mut key = b"decant:inference:v1:".to_vec();
+        key.extend_from_slice(request_id.as_bytes());
+        if let Some(bytes) = env::storage_read(&key) {
+            let prior: InferenceDebit = near_sdk::borsh::from_slice(&bytes)
+                .expect("Invalid stored inference debit");
+            assert!(prior.session_id == session_id && prior.amount == amount, "Conflicting inference debit");
+            return false;
+        }
+
+        self.consume_quota(session_id.clone(), amount);
+        let bytes = near_sdk::borsh::to_vec(&InferenceDebit { session_id, amount })
+            .expect("Could not encode inference debit");
+        env::storage_write(&key, &bytes);
+        true
     }
 
     /// Top up a session's quota with additional compute tokens.
@@ -363,6 +391,36 @@ mod tests {
 
         let quota = contract.get_quota("session-001".to_string());
         assert_eq!(quota.remaining, 90);
+    }
+
+    #[test]
+    fn test_inference_debit_is_idempotent() {
+        testing_env!(get_context("owner.test.near").build());
+        let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
+        contract.register_session("session".into(), 100);
+        assert!(contract.settle_inference("request".into(), "session".into(), 22));
+        assert!(!contract.settle_inference("request".into(), "session".into(), 22));
+        assert_eq!(contract.get_quota("session".into()).remaining, 78);
+    }
+
+    #[test]
+    #[should_panic(expected = "Conflicting inference debit")]
+    fn test_inference_debit_rejects_changed_amount() {
+        testing_env!(get_context("owner.test.near").build());
+        let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
+        contract.register_session("session".into(), 100);
+        contract.settle_inference("request".into(), "session".into(), 22);
+        contract.settle_inference("request".into(), "session".into(), 23);
+    }
+
+    #[test]
+    #[should_panic(expected = "Contract owner required")]
+    fn test_inference_debit_requires_owner() {
+        testing_env!(get_context("owner.test.near").build());
+        let mut contract = DecantContract::new("owner.test.near".parse().unwrap());
+        contract.register_session("session".into(), 100);
+        testing_env!(get_context("agent.test.near").build());
+        contract.settle_inference("request".into(), "session".into(), 22);
     }
 
     #[test]
