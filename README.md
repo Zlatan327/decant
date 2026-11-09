@@ -256,6 +256,25 @@ The JavaScript tests exercise the real gateway and SQLite ledger locally. The co
 
 For read-only testnet quota checks, set `VITE_DECANT_NEAR_CONTRACT_ID` to a verified contract account before running or building the dashboard. A quota read is separate from gateway credit settlement.
 
+## NEAR Testnet settlement check
+
+The operator can reconcile a specific settled SQLite inference debit with a signed Testnet write. Use a dedicated Testnet deployment of the contract built from this branch and register the same session ID on-chain with enough quota before submitting. The signer must be the contract owner. Use a Testnet function-call access key restricted to the contract and `settle_inference` for the settlement script.
+
+On the machine that ran the real inference, set these values in the root `.env`:
+
+- `DATABASE_PATH` points to the gateway ledger containing the inference transaction.
+- `NEAR_CONTRACT_ID` is the deployed Testnet contract.
+- `NEAR_ACCOUNT_ID` is the Testnet contract owner.
+- `NEAR_SETTLEMENT_PRIVATE_KEY` is the restricted signing key. Keep it out of Git.
+
+Record the on-chain session quota, then run:
+
+```sh
+npm run settle:testnet -- <ledger-transaction-id>
+```
+
+Save the request ID, session ID, credits, transaction hash and receipt ID from the result. Verify the Testnet quota fell by the same number of credits. An exact retry returns `applied: false` with a receipt for the retry and leaves the quota unchanged. Preserve the original receipt for the first debit. The script uses the FastNEAR Testnet RPC and waits for final execution. It leaves the local inference balance unchanged and does not run automatically on gateway requests.
+
 ## Repository
 
 | Package | Purpose |

@@ -21,7 +21,8 @@
     "dev:dashboard": "npm run dev --workspace=packages/dashboard",
     "dev:cluster": "node scripts/cluster.mjs",
     "deploy:testnet": "node scripts/deploy_testnet.cjs",
-    "keygen": "node scripts/keygen.mjs"
+    "keygen": "node scripts/keygen.mjs",
+    "settle:testnet": "node scripts/settle_testnet.mjs"
   },
   "engines": {
     "node": ">=24.0.0"
