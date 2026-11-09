@@ -7,7 +7,6 @@ COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/gateway/package.json ./packages/gateway/
 COPY packages/agent-sdk/package.json ./packages/agent-sdk/
 COPY packages/dashboard/package.json ./packages/dashboard/
-COPY packages/simulator/package.json ./packages/simulator/
 
 RUN npm ci --workspace=@decant/gateway
 

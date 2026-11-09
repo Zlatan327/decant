@@ -1,4 +1,4 @@
-import type { DashboardSection } from './SidebarNav';
+import type { DashboardSection } from '../domain/navigation';
 import { targetAttributes } from './targets';
 
 interface HowItWorksViewProps {
@@ -25,7 +25,7 @@ const STEPS: GuideStep[] = [
     description:
       'Connect the operator credential to manage sessions, credit quotas, and recovery. The key is kept strictly in React memory for the page visit and is never saved to browser storage or leaked into frontend builds.',
     endpoint: 'X-Decant-Admin-Key: <DECANT_ADMIN_KEY>',
-    codeSnippet: 'Bearer authorization for operator-only endpoints',
+    codeSnippet: 'Operator authorization header',
     actionLabel: 'Connect & View Telemetry →',
     targetSection: 'evidence',
   },
@@ -45,9 +45,9 @@ const STEPS: GuideStep[] = [
     tag: 'INFERENCE TUNNEL',
     title: 'Stream Real-Time Provider Tokens',
     description:
-      'Select a funded session and an active upstream model (e.g. gemini-3.5-flash). The client signs the request using Ed25519 headers; the gateway reserves maximum credits upfront and streams live token chunks via SSE.',
+      'Select a session with credits and a configured model. The gateway reserves credits before sending the prompt and streams the provider response as it arrives.',
     endpoint: 'POST /v1/chat/completions',
-    codeSnippet: '{ "model": "gemini-3.5-flash", "messages": [{ "role": "user", "content": "..." }], "stream": true }',
+    codeSnippet: '{ "model": "<configured-model>", "messages": [{ "role": "user", "content": "..." }], "stream": true }',
     actionLabel: 'Open Inference Console →',
     targetSection: 'request',
     featured: true,
@@ -59,25 +59,25 @@ const STEPS: GuideStep[] = [
     description:
       'The gateway enforces hard security boundaries: depleted balances halt compute with HTTP 402 Payment Required; tampered payloads or invalid signatures reject with HTTP 403; requests over 4KB reject with HTTP 413.',
     endpoint: 'HARD GATES: HTTP 402 · 403 · 413 · 429',
-    codeSnippet: 'Anti-hallucination payload caps, token buckets, and replay rejection',
+    codeSnippet: 'Request size limits, rate limits, and replay rejection',
     actionLabel: 'Verify Circuit Breakers →',
     targetSection: 'request',
   },
   {
     num: '05',
-    tag: 'SOLVER MARKETPLACE',
-    title: 'Broadcast & Match Compute Intents',
+    tag: 'INTENT REGISTRY',
+    title: 'Record a Compute Intent',
     description:
-      'Autonomous agents broadcast compute intent requirements (target model, budget, parameters) to the open registry. Decentralized solver nodes match and lock commitments to fulfill workloads.',
+      'Autonomous agents broadcast compute intent requirements (target model, budget, parameters) to the open registry. Assignments are local records and do not dispatch provider work.',
     endpoint: 'POST /v1/intents/broadcast',
-    codeSnippet: '{ "model": "gemini-3.5-flash", "maxBudget": 200 }',
-    actionLabel: 'Explore Intent Marketplace →',
+    codeSnippet: '{ "model": "<configured-model>", "maxBudget": 200 }',
+    actionLabel: 'View Intent Records →',
     targetSection: 'routing',
   },
   {
     num: '06',
     tag: 'ACID ACCOUNTING',
-    title: 'Double-Entry Ledger & Recovery',
+    title: 'Credit Ledger & Recovery',
     description:
       'Inspect persistent SQLite WAL-mode transaction records. If a gateway restarts or network drops mid-stream, the Reservation Review Panel surfaces stranded holds (>5 min) for audited operator usage settlement.',
     endpoint: 'GET /v1/reservations · POST /v1/reservations/:id/review',
@@ -108,11 +108,11 @@ export function HowItWorksView({ onNavigate }: HowItWorksViewProps) {
         <div className="guide-quickstart">
           <div className="guide-quickstart__header">
             <span className="mono">TERMINAL QUICK START</span>
-            <span className="guide-quickstart__env mono">NODE.JS 24 · REAL PROVIDER STREAM</span>
+            <span className="guide-quickstart__env mono">NODE.JS 24</span>
           </div>
           <div className="guide-quickstart__cmd mono">
-            <code>npm run simulate</code>
-            <span className="guide-quickstart__note">Executes an isolated 1,000 credit agent harness with real Google Gemini streaming</span>
+            <code>npm run dev:gateway</code>
+            <span className="guide-quickstart__note">Starts the gateway. Set a provider and model in the root .env first.</span>
           </div>
         </div>
       </div>

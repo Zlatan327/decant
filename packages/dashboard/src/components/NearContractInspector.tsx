@@ -4,48 +4,58 @@ import { DEFAULT_CONTRACT_ID, DEFAULT_NEAR_RPC, fetchContractQuota, fetchNearAcc
 export function NearContractInspector() {
   const [contractInfo, setContractInfo] = useState<NearAccountInfo | null>(null);
   const [loading, setLoading] = useState(false);
-  const [querySessionId, setQuerySessionId] = useState('agent-production-01');
+  const [querySessionId, setQuerySessionId] = useState('');
   const [quotaResult, setQuotaResult] = useState<NearContractQuota | null>(null);
   const [queryLoading, setQueryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void loadContractInfo();
-    void queryQuota('agent-production-01');
   }, []);
 
   async function loadContractInfo() {
+    if (!DEFAULT_CONTRACT_ID) return;
     setLoading(true);
     setError(null);
     try {
       const info = await fetchNearAccount(DEFAULT_CONTRACT_ID);
       setContractInfo(info);
     } catch (err) {
+      setContractInfo(null);
       setError(err instanceof Error ? err.message : 'Could not reach FastNEAR RPC');
     } finally {
       setLoading(false);
     }
   }
 
-  async function queryQuota(sessionIdToQuery?: string) {
-    const id = (sessionIdToQuery || querySessionId).trim();
+  async function queryQuota() {
+    const id = querySessionId.trim();
     if (!id) return;
     setQueryLoading(true);
+    setQuotaResult(null);
+    setError(null);
     try {
       const quota = await fetchContractQuota(id);
       setQuotaResult(quota);
-    } catch {
-      setQuotaResult(null);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Could not read contract quota.");
     } finally {
       setQueryLoading(false);
     }
+  }
+
+  if (!DEFAULT_CONTRACT_ID) {
+    return <section className="panel near-contract-panel">
+      <h2>NEAR Testnet</h2>
+      <p className="field-note">Set a testnet contract ID to enable quota lookups.</p>
+    </section>;
   }
 
   return (
     <section className="panel near-contract-panel" aria-label="NEAR Smart Contract Explorer">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">On-chain settlement layer</p>
+          <p className="eyebrow">Read-only contract lookup</p>
           <h2>NEAR Testnet Smart Contract</h2>
         </div>
         <div className="panel-heading__actions">
@@ -57,7 +67,6 @@ export function NearContractInspector() {
           >
             {loading ? 'Refreshing…' : 'Refresh State'}
           </button>
-          <span className="status-pill status-pill--healthy">LIVE ON TESTNET</span>
         </div>
       </div>
 
@@ -76,8 +85,8 @@ export function NearContractInspector() {
         </div>
 
         <div className="contract-stat-card">
-          <span className="metric-label">Contract Staked Balance</span>
-          <strong className="mono green-text">{contractInfo ? `${contractInfo.nearBalance} NEAR` : 'Loading…'}</strong>
+          <span className="metric-label">Account balance</span>
+          <strong className="mono green-text">{contractInfo ? `${contractInfo.nearBalance} NEAR` : '—'}</strong>
         </div>
 
         <div className="contract-stat-card">
@@ -114,7 +123,7 @@ export function NearContractInspector() {
           <div className="input-with-action">
             <input
               type="text"
-              placeholder="Enter session ID (e.g. agent-production-01)…"
+              placeholder="Enter session ID"
               value={querySessionId}
               onChange={(e) => setQuerySessionId(e.target.value)}
               className="mono"

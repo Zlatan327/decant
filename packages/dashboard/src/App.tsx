@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { gatewayTargetLabel, requestJson, setOperatorKey } from './api/client';
 import { ActivityFeed } from './components/ActivityFeed';
 import { DecantLogoMark } from './components/DecantLogo';
-import { ValueAccrualCard } from './components/ValueAccrualCard';
 import { HowItWorksView } from './components/HowItWorksView';
 import { HealthBar } from './components/HealthBar';
 import { IntentBoard } from './components/IntentBoard';
@@ -10,11 +9,10 @@ import { SessionPanel } from './components/SessionPanel';
 import { StreamViewer } from './components/StreamViewer';
 import { ReservationReviewPanel } from './components/ReservationReviewPanel';
 import { TransactionAudit } from './components/TransactionAudit';
-import { AuthModal, type AuthState } from './components/AuthModal';
+import { AuthModal } from './components/AuthModal';
 import { NearContractInspector } from './components/NearContractInspector';
 import { ProviderStudioView } from './components/ProviderStudioView';
-import type { NearAccountInfo } from './api/near';
-import type { DashboardSection } from './components/SidebarNav';
+import type { DashboardSection } from './domain/navigation';
 
 import { useDashboardData } from './hooks/useDashboardData';
 import { targetAttributes } from './components/targets';
@@ -31,7 +29,6 @@ const CATEGORY_HEADERS: Partial<Record<DashboardSection, { headline: string; tag
   provider: { headline: 'Providers', tagline: 'View and manage registered providers.' },
   identity: { headline: 'Sessions', tagline: 'Register agent keys and allocate local credits.' },
   accounting: { headline: 'Ledger', tagline: 'Review credit usage and held credits.' },
-  value: { headline: 'Solver credits', tagline: 'View local solver credit records.' },
   routing: { headline: 'Routing', tagline: 'Review compute intents and inspect the NEAR testnet contract.' },
   guide: { headline: 'Guide', tagline: 'Get started with the gateway.' },
   evidence: { headline: 'Activity', tagline: 'Review requests observed by the gateway.' },
@@ -41,17 +38,12 @@ export function App() {
   const dashboard = useDashboardData();
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authState, setAuthState] = useState<AuthState>({
-    role: 'guest',
-    nearAccount: null,
-    operatorKey: '',
-    agentSessionId: null,
-  });
+  const [isOperator, setIsOperator] = useState(false);
 
   const [now, setNow] = useState(() => Date.now());
   const [activeSection, selectSection] = useState<DashboardSection>('overview');
   const setActiveSection = (section: DashboardSection) => {
-    selectSection(section === 'shop' ? 'identity' : section);
+    selectSection(section);
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -71,48 +63,16 @@ export function App() {
     }
   };
 
-  const handleConnectNear = (account: NearAccountInfo) => {
-    setOperatorKey('');
-    setAuthState((prev) => ({
-      ...prev,
-      role: 'near-wallet',
-      operatorKey: '',
-      nearAccount: account,
-    }));
-    void dashboard.refresh();
-  };
-
   const handleConnectOperator = async (key: string) => {
     await requestJson('/v1/sessions', { headers: { 'X-Decant-Admin-Key': key } });
     setOperatorKey(key);
-    setAuthState((prev) => ({
-      ...prev,
-      role: 'operator',
-      operatorKey: key,
-    }));
-    void dashboard.refresh();
-  };
-
-  const handleConnectAgent = (sessionId: string) => {
-    setOperatorKey('');
-    dashboard.selectSession(sessionId);
-    setAuthState((prev) => ({
-      ...prev,
-      role: 'agent',
-      operatorKey: '',
-      agentSessionId: sessionId,
-    }));
+    setIsOperator(true);
     void dashboard.refresh();
   };
 
   const handleDisconnect = () => {
     setOperatorKey('');
-    setAuthState({
-      role: 'guest',
-      nearAccount: null,
-      operatorKey: '',
-      agentSessionId: null,
-    });
+    setIsOperator(false);
     void dashboard.refresh();
   };
 
@@ -297,32 +257,10 @@ export function App() {
               </a>
             </div>
 
-            {/* ── Primary workspace navigation ── */}
-            <nav className="topbar-nav" aria-label="Sections">
-              {categories.map((cat) => {
-                const isActive = activeSection === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    className={`topbar-tab ${isActive ? 'topbar-tab--active' : ''}`}
-                    onClick={() => setActiveSection(cat.id)}
-                    aria-pressed={isActive}
-                    title={cat.label}
-                    data-render-target={`category-tab-${cat.id}`}
-                  >
-                    <span className={`topbar-tab__label ${isActive ? 'topbar-tab__label--active' : ''}`}>
-                      {cat.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
-
             <span className="workspace-location">Workspace / {categories.find(category => category.id === activeSection)?.label ?? CATEGORY_HEADERS[activeSection]?.headline}</span>
             <div className="topbar__meta">
               <button type="button" className="button button--quiet operator-access" onClick={() => setIsAuthModalOpen(true)}>
-                {authState.role === 'operator' ? 'Operator settings' : 'Operator access'}
+                {isOperator ? 'Operator settings' : 'Operator access'}
               </button>
               <span
                 className={`connection-chip connection-chip--${gatewayTone}`}
@@ -361,7 +299,7 @@ export function App() {
             {activeSection === 'provider' && (
               <div className="workspace-view" key="provider">
                 <ProviderStudioView
-                  canManage={authState.role === 'operator'}
+                  canManage={isOperator}
                   onSuccessNotice={() => void dashboard.refresh()}
                 />
               </div>
@@ -398,14 +336,6 @@ export function App() {
             {/* ── Section 2: How It Works Guide ── */}
             {activeSection === 'guide' && (
               <HowItWorksView onNavigate={setActiveSection} />
-            )}
-
-            {/* ── Section 3: Compute-to-Value (USDT Redemption) ── */}
-            {activeSection === 'value' && (
-              <div className="workspace-view" key="value">
-                <ValueAccrualCard onSuccess={() => void dashboard.refresh()} />
-                <TransactionAudit transactions={dashboard.state.transactions} />
-              </div>
             )}
 
             {/* ── Section 4: Identity & Credit ── */}
@@ -473,7 +403,7 @@ export function App() {
 
                 <div className="workspace-view--single">
                   <TransactionAudit transactions={dashboard.state.transactions} />
-                  {authState.role === 'operator' ? (
+                  {isOperator ? (
                     <ReservationReviewPanel onReviewed={() => void dashboard.refresh()} />
                   ) : (
                     <section className="panel ledger-access">
@@ -525,12 +455,9 @@ export function App() {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        authState={authState}
-        onConnectNear={handleConnectNear}
+        isOperator={isOperator}
         onConnectOperator={handleConnectOperator}
-        onConnectAgent={handleConnectAgent}
         onDisconnect={handleDisconnect}
-        sessions={dashboard.state.sessions.data ?? []}
       />
     </div>
   );

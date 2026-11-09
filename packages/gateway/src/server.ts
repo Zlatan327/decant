@@ -18,7 +18,6 @@ import { DecantCrypto } from "./crypto.js";
 import { DecantComputeEngine } from "./compute-engine.js";
 import { enforceRateLimitDistributed, enforcePayloadSize } from "./policy.js";
 import { DecantRedisClient } from "./redis.js";
-import { DecantConnectionPooler } from "./pooler.js";
 
 export interface GatewayServerOptions {
   port?: number;
@@ -34,21 +33,21 @@ export class DecantGatewayServer {
   public readonly ledger: DecantLedger;
   public readonly compute: DecantComputeEngine;
   public readonly redis: DecantRedisClient;
-  public readonly pooler: DecantConnectionPooler;
   public readonly nodeId: string;
   private port: number;
   private assignedPort: number = 0;
   private readonly activeRequests = new Set<string>();
+  private readonly databasePath: string;
   private readonly adminKey: string | undefined;
 
   constructor(opts: GatewayServerOptions = {}) {
     this.port = opts.port ?? parseInt(process.env["PORT"] ?? "8080", 10);
-    this.ledger = new DecantLedger(opts.dbPath ?? (process.env["DATABASE_URL"] ?? ":memory:"));
+    this.databasePath = opts.dbPath ?? process.env["DATABASE_PATH"] ?? ":memory:";
+    this.ledger = new DecantLedger(this.databasePath);
     this.compute = new DecantComputeEngine();
     this.adminKey = opts.adminKey ?? process.env["DECANT_ADMIN_KEY"];
     this.nodeId = opts.nodeId ?? (process.env["NODE_ID"] || "server-1");
     this.redis = new DecantRedisClient(opts.redisUrl ?? process.env["REDIS_URL"]);
-    this.pooler = new DecantConnectionPooler(opts.dbPath ?? process.env["DATABASE_URL"]);
 
     if (this.redis.isConfigured()) {
       this.redis.connect().catch(() => {});
@@ -190,38 +189,8 @@ export class DecantGatewayServer {
       // ── Diagnostics & Health ────────────────────────────────────────────────
             // ── OpenAI-Compatible Model Catalog ────────────────────────────────────
       if (pathname === "/v1/models" && method === "GET") {
-        const modelData = this.compute.models.map((m) => {
-          const isLite = m.includes("lite");
-          const isPro = m.includes("pro") || m.includes("3.8");
-          return {
-            id: m,
-            object: "model",
-            created: 1740000000,
-            owned_by: m.startsWith("gemini") ? "google-deepmind" : "depin-cluster",
-            permission: [],
-            root: m,
-            parent: null,
-            capabilities: { streaming: true, chat: true, completion: true },
-            pricing: { credit_multiplier: isLite ? 0.5 : isPro ? 1.5 : 1.0, metering_unit: "ceil(characters / 4)" },
-            context_window: isLite ? 524288 : 1048576,
-          };
-        });
-        this.sendJson(res, 200, { object: "list", data: modelData }, {}, req);
-        return;
-      }
-
-      // ── Credit Packages / Pricing Catalog ──────────────────────────────────
-      if (pathname === "/v1/packages" && method === "GET") {
-        this.sendJson(res, 200, {
-          packages: [
-            { id: "trial", name: "Developer Trial", credits: 1000, priceNear: 0, description: "Free testnet sandbox allocation for quick validation", tier: "free" },
-            { id: "starter", name: "Agent Starter", credits: 5000, priceNear: 0.5, description: "Standard bundle for autonomous bots and agents", tier: "starter" },
-            { id: "pro", name: "Production Bot", credits: 25000, priceNear: 2.0, description: "High volume compute routing for production pipelines", tier: "pro" },
-            { id: "swarm", name: "Autonomous Swarm", credits: 100000, priceNear: 7.5, description: "Heavy throughput for coordinated agent swarms", tier: "swarm" },
-          ],
-          rate: "1 NEAR = 10,000 Compute Credits",
-          unitSize: "1 unit ≈ 4 characters of provider text",
-        }, {}, req);
+        const data = this.compute.models.map(id => ({ id, object: "model" }));
+        this.sendJson(res, 200, { object: "list", data }, {}, req);
         return;
       }
 
@@ -230,57 +199,17 @@ export class DecantGatewayServer {
           status: "healthy",
           nodeId: this.nodeId,
           uptime: process.uptime(),
-          ledger: this.pooler.isPoolerActive() ? "postgres-pgbouncer-pool" : "sqlite-acid-persistent",
+          ledger: this.databasePath === ":memory:" ? "sqlite-in-memory" : "sqlite-acid-persistent",
           nearSync: "not-connected",
           models: this.compute.models,
           inferenceConfigured: this.compute.configured,
           metering: "ceil(characters / 4), estimated credit units",
           cluster: {
             nodeId: this.nodeId,
-            loadBalanced: Boolean(process.env["LOAD_BALANCER_ACTIVE"] || process.env["NODE_ID"]),
+            loadBalanced: process.env["LOAD_BALANCER_ACTIVE"] === "true",
             redis: this.redis.getHealth(),
-            pooler: this.pooler.getHealth(),
           },
           timestamp: Date.now(),
-        }, {}, req);
-        return;
-      }
-
-      // ── Backwards Compatible Phase 1/2 Echo Routes ─────────────────────────
-      if (pathname === "/get" && method === "GET") {
-        const sessionId = req.headers["x-decant-session"] as string;
-        if (!sessionId) {
-          this.sendJson(res, 401, { error: "Unauthorized — missing X-Decant-Session header" }, {}, req);
-          return;
-        }
-        if (!(await this.authorizeSession(req, res, sessionId, ""))) return;
-        if (!(await enforceRateLimitDistributed(req, res, this.redis))) return;
-
-        this.sendJson(res, 200, {
-          echo: true,
-          method: "GET",
-          path: "/get",
-          session: sessionId,
-        }, {}, req);
-        return;
-      }
-
-      if (pathname === "/post" && method === "POST") {
-        const sessionId = req.headers["x-decant-session"] as string;
-        if (!sessionId) {
-          this.sendJson(res, 401, { error: "Unauthorized — missing X-Decant-Session header" }, {}, req);
-          return;
-        }
-        if (!enforcePayloadSize(req, res)) return;
-        const raw = await this.parseBody(req, 4 * 1024);
-        if (!(await this.authorizeSession(req, res, sessionId, raw))) return;
-        if (!(await enforceRateLimitDistributed(req, res, this.redis))) return;
-        this.sendJson(res, 200, {
-          echo: true,
-          method: "POST",
-          path: "/post",
-          body: raw,
-          session: sessionId,
         }, {}, req);
         return;
       }
@@ -328,7 +257,7 @@ export class DecantGatewayServer {
         try { PublicKey.fromString(publicKey); }
         catch { this.sendJson(res, 400, { error: "Invalid Ed25519 public key" }, {}, req); return; }
         try {
-          const session = this.ledger.registerSession(sessionId, publicKey, ownerAccountId ?? "agent.testnet", quota);
+          const session = this.ledger.registerSession(sessionId, publicKey, ownerAccountId ?? "", quota);
           this.sendJson(res, 201, session, {}, req);
         } catch (err: any) {
           this.sendJson(res, 409, { error: err.message }, {}, req);
@@ -493,7 +422,8 @@ export class DecantGatewayServer {
 
       // ── Compute Providers (Solvers) API Supply ─────────────────────────────
       if (pathname === "/v1/solvers" && method === "GET") {
-        const solvers = this.ledger.listSolvers();
+        const solvers = this.ledger.listSolvers().map(({ solverId, endpointUrl, modelsSupported, isActive }) =>
+          ({ solverId, endpointUrl, modelsSupported, isActive }));
         this.sendJson(res, 200, { solvers }, {}, req);
         return;
       }
@@ -512,19 +442,27 @@ export class DecantGatewayServer {
           return;
         }
 
+        const endpointUrl = typeof body.endpointUrl === "string" ? body.endpointUrl.trim() : "";
+        const endpoint = URL.parse(endpointUrl);
+        const modelsSupported = body.modelsSupported;
+        if (!endpoint || !["https:", "http:"].includes(endpoint.protocol)
+          || !Array.isArray(modelsSupported) || !modelsSupported.length
+          || modelsSupported.some(model => typeof model !== "string" || !model.trim())) {
+          this.sendJson(res, 400, { error: "A valid HTTP(S) endpoint and at least one model ID are required" }, {}, req);
+          return;
+        }
+
         const solver = this.ledger.registerSolver({
           solverId,
-          endpointUrl: body.endpointUrl || "https://api.decant.internal",
-          modelsSupported: Array.isArray(body.modelsSupported) && body.modelsSupported.length > 0
-            ? body.modelsSupported
-            : ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"],
-          pricePerKTokens: Number(body.pricePerKTokens) || 1.0,
-          reputationScore: 5.0,
+          endpointUrl,
+          modelsSupported: modelsSupported.map((model: string) => model.trim()),
+          pricePerKTokens: 0,
+          reputationScore: 0,
           isActive: body.isActive !== false,
         });
 
         this.sendJson(res, 201, {
-          solver,
+          solver: { solverId: solver.solverId, endpointUrl, modelsSupported: solver.modelsSupported, isActive: solver.isActive },
           message: "Compute provider registered successfully. This is a registry entry. Provider routing and earnings are pending.",
         }, {}, req);
         return;
@@ -557,8 +495,6 @@ export class DecantGatewayServer {
           earnedCredits: earned,
           endpointUrl: solver.endpointUrl,
           modelsSupported: solver.modelsSupported,
-          reputationScore: solver.reputationScore,
-          rate: `${solver.pricePerKTokens} units / 1K tokens`,
         }, {}, req);
         return;
       }

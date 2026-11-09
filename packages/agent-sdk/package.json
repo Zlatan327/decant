@@ -5,8 +5,7 @@
   "type": "module",
   "main": "dist/client.js",
   "scripts": {
-    "build": "tsc",
-    "demo": "tsx src/client.ts"
+    "build": "tsc"
   },
   "devDependencies": {
     "tsx": "^4.19.0",

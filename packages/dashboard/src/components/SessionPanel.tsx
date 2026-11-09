@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { errorMessage } from '../api/client';
-import { generateAgentKeypair } from '../domain/crypto';
+import { generateAgentIdentity, type AgentIdentity } from '../domain/identity';
 import { formatDateTime, formatNumber, quotaPercent, shortIdentifier } from '../domain/format';
 import type { ApiResource, RegisterSessionInput, SessionDetail, SessionRecord, TransactionRecord } from '../domain/types';
 import { targetAttributes } from './targets';
@@ -231,7 +231,7 @@ export function SessionPanel({
   const [quota, setQuota] = useState('100');
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
-  const [generatedIdentity, setGeneratedIdentity] = useState<any | null>(null);
+  const [generatedIdentity, setGeneratedIdentity] = useState<AgentIdentity | null>(null);
 
   const records = sessions.data ?? [];
   const returnedIds = new Set(records.map((record) => record.sessionId));
@@ -241,14 +241,14 @@ export function SessionPanel({
 
   async function handleGenerateKeys() {
     try {
-      const identity = await generateAgentKeypair();
+      const identity = await generateAgentIdentity();
       setGeneratedIdentity(identity);
       setSessionId(identity.sessionId);
       setPublicKey(identity.publicKey);
-      setOwnerAccountId(`${identity.sessionId}.testnet`);
       setRegisterOpen(true);
-    } catch {
-      setRegisterError('Could not generate keys in this browser context.');
+    } catch (failure) {
+      setRegisterOpen(true);
+      setRegisterError(errorMessage(failure));
     }
   }
 

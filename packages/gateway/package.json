@@ -7,10 +7,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/proxy.ts",
-    "seed": "tsx src/seed.ts",
-    "test": "node --import tsx --test __tests__/wire.ts __tests__/depin.ts __tests__/production.ts __tests__/security.ts __tests__/recovery.ts __tests__/cluster-redis.ts",
-    "test:wire": "node --import tsx --test __tests__/wire.ts",
-    "test:depin": "node --import tsx --test __tests__/depin.ts",
+    "test": "node --import tsx --test __tests__/*.ts",
     "test:prod": "node --import tsx --test __tests__/production.ts",
     "test:security": "node --import tsx --test __tests__/security.ts",
     "test:recovery": "node --import tsx --test __tests__/recovery.ts",

@@ -40,7 +40,6 @@
 
 .decant-console .logo-word { color: var(--text) !important; font-size: 22px !important; }
 .decant-console .workspace-location { color: var(--muted); }
-.decant-console .topbar-nav { display: none !important; }
 .decant-console .topbar__meta { flex-wrap: wrap; justify-content: end; }
 .decant-console .topbar-refresh-btn,
 .decant-console .connection-chip { color: var(--text) !important; font-size: 14px !important; }
@@ -90,7 +89,7 @@
 .decant-console .console-page-heading .button { margin-top: 16px; }
 
 .decant-console :is(.panel, .health-rail, .near-inspector, .guide-card, .guide-hero, .guide-compliance-banner,
-  .overview-guide-prompt, .auth-modal, .value-accrual-card, .app-footer) {
+  .overview-guide-prompt, .auth-modal, .app-footer) {
   background: var(--console-panel) !important;
   border-color: var(--console-border) !important;
   color: var(--text) !important;
