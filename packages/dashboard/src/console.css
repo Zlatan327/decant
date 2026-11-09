@@ -1,12 +1,12 @@
 /* Workspace surfaces sit above the existing background defined on html. */
 .decant-console {
-  --console-panel: #18232c;
-  --console-inset: #111b23;
-  --console-border: #546471;
-  --console-accent: #82efbd;
-  --text: #f1f6f9;
-  --muted: #bdcad4;
-  --faint: #abbac6;
+  --console-panel: #192623;
+  --console-inset: #101a19;
+  --console-border: #465e55;
+  --console-accent: #8de6bb;
+  --text: #f1f7f3;
+  --muted: #c3d4ca;
+  --faint: #adbfba;
   --ink: var(--text);
   --ink-70: var(--muted);
   --surface: var(--console-panel);
@@ -15,20 +15,10 @@
   --near-green: var(--console-accent);
   --near-mint-flow: var(--console-accent);
   --border: 1px solid var(--console-border);
+  color-scheme: dark;
   font-size: 16px;
   line-height: 1.5;
   color: var(--text);
-}
-
-.decant-console[data-theme="light"] {
-  color-scheme: light;
-  --console-panel: #f8fafc;
-  --console-inset: #eaf0f5;
-  --console-border: #71818f;
-  --console-accent: #075c40;
-  --text: #15232f;
-  --muted: #394d5e;
-  --faint: #465c6c;
 }
 
 .decant-console .app-layout,
@@ -53,9 +43,7 @@
 .decant-console .topbar-nav { display: none !important; }
 .decant-console .topbar__meta { flex-wrap: wrap; justify-content: end; }
 .decant-console .topbar-refresh-btn,
-.decant-console .theme-toggle-btn,
 .decant-console .connection-chip { color: var(--text) !important; font-size: 14px !important; }
-.decant-console .theme-toggle-btn { width: auto; min-height: 36px; padding-inline: 8px; }
 .decant-console .mobile-menu-btn {
   display: inline-flex !important;
   color: var(--text) !important;
@@ -79,21 +67,21 @@
 .decant-console .app-main {
   width: 100% !important;
   min-width: 0;
-  max-width: 1520px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: clamp(12px, 3vw, 32px) !important;
+  padding: clamp(14px, 3vw, 32px) !important;
 }
 
 .decant-console .console-page-heading {
   background: var(--console-inset);
-  border: var(--border);
-  padding: clamp(16px, 3vw, 28px);
-  border-radius: 10px;
-  margin-bottom: 20px;
+  border-left: 3px solid var(--console-accent);
+  padding: 16px clamp(16px, 3vw, 24px);
+  border-radius: 8px;
+  margin-bottom: 16px;
 }
 .decant-console .console-page-heading h1 {
   color: var(--text);
-  font-size: clamp(28px, 3vw, 44px);
+  font-size: clamp(28px, 3vw, 38px);
   line-height: 1.15;
   letter-spacing: -0.035em;
   margin: 0 0 8px;
@@ -140,14 +128,13 @@
   outline: 2px solid var(--console-accent) !important;
   outline-offset: 3px;
 }
-.decant-console .button { min-height: 42px; font-size: 15px !important; }
+.decant-console .button { min-height: 44px; font-size: 15px !important; }
 .decant-console .button--primary {
   background: var(--console-accent) !important;
   color: #10251a !important;
   border-color: var(--console-accent) !important;
   box-shadow: none !important;
 }
-.decant-console[data-theme="light"] .button--primary { color: white !important; }
 .decant-console :is(.button--quiet, .button--secondary) {
   background: var(--console-inset) !important;
   color: var(--text) !important;
@@ -170,7 +157,7 @@
 .decant-console .request-settings { padding: 10px 12px; }
 .decant-console .request-settings .request-fields { margin-top: 12px; }
 .decant-console .request-response { display: flex; flex-direction: column; }
-.decant-console .request-response__empty { margin: auto 0; padding: 24px 0; color: var(--muted); text-align: center; }
+.decant-console .request-response__empty { margin: auto 0; padding: 24px 0; color: var(--muted); text-align: left; }
 .decant-console .request-response__text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; max-height: 36rem; overflow-y: auto; }
 .decant-console .provider-registry { padding: 20px; }
 .decant-console .registry-list { list-style: none; padding: 0; }
@@ -217,3 +204,93 @@
 @media (min-width: 1060px) {
   .decant-console .app-layout { width: calc(100% - 218px); }
 }
+
+/* Keep the legacy responsive navigation rules from changing label contrast. */
+.decant-console .mobile-drawer__item {
+  border-radius: 7px !important;
+  text-align: left;
+}
+.decant-console .mobile-drawer__item--active {
+  background: #253b32 !important;
+  box-shadow: inset 3px 0 var(--console-accent);
+}
+.decant-console .mobile-drawer__label {
+  color: inherit !important;
+  font-size: 1rem !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  text-decoration: none !important;
+}
+.decant-console .mobile-drawer__item--active .mobile-drawer__label {
+  color: var(--console-accent) !important;
+  font-weight: 600 !important;
+}
+.decant-console .mobile-drawer__close { min-width: 44px; min-height: 44px; }
+.decant-console :is(.workspace-view, .workspace-view--single) { gap: 16px !important; }
+.decant-console :is(.panel h3, .panel-heading h2) {
+  font-size: 1.25rem !important;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+.decant-console :is(.panel__desc, .tab-desc, .sync-label, .metric-label) {
+  color: var(--muted) !important;
+  line-height: 1.45;
+}
+.decant-console :is(.panel__desc, .tab-desc, .request-settings summary) { font-size: .9375rem !important; }
+.decant-console :is(.health-metric strong, .contract-stat-card .mono) {
+  font-size: .875rem !important;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.decant-console .health-metric__node { color: var(--console-accent); }
+.decant-console .health-rail__metrics { min-width: 0; }
+.decant-console .request-response__empty {
+  margin: 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--console-inset);
+}
+.decant-console .request-session-link { justify-self: start; }
+.decant-console .request-form .field-note { margin: 0; }
+.decant-console .ledger-access p { color: var(--muted); }
+.decant-console .generated-key-banner { overflow-wrap: anywhere; }
+
+@media (max-width: 760px) {
+  .decant-console .health-rail__metrics { gap: 12px !important; }
+  .decant-console .near-contract-panel :is(.panel-heading, .input-with-action) {
+    flex-wrap: wrap;
+  }
+  .decant-console .near-contract-panel .input-with-action input { min-width: 0; }
+}
+@media (orientation: landscape) and (max-height: 480px) {
+  .decant-console .topbar { min-height: 54px !important; }
+}
+
+.decant-console .health-rail.panel {
+  padding: 16px !important;
+  border: var(--border);
+}
+.decant-console .health-rail__state { font-size: .9375rem; }
+.decant-console .sync-label { font-size: .8125rem; }
+
+.decant-console .guide-steps-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+  margin: 0;
+}
+.decant-console .guide-hero {
+  padding: clamp(16px, 3vw, 24px);
+  border: var(--border);
+  border-radius: 10px;
+  margin: 0;
+}
+.decant-console .guide-title { font-size: clamp(22px, 3vw, 30px); }
+.decant-console .guide-quickstart { padding: 14px; box-shadow: none; }
+.decant-console .guide-quickstart__header { flex-wrap: wrap; gap: 6px 12px; }
+.decant-console :is(.empty-state__body, .guide-quickstart__note, .guide-compliance-text) {
+  color: var(--muted);
+  font-size: .9375rem;
+}
+.decant-console :is(.empty-state__title, .guide-card__action) { font-size: .9375rem; }
+.decant-console .guide-card__action { min-height: 44px; }
+.decant-console .request-form :is(select, textarea) { font-weight: 400; }

@@ -50,7 +50,7 @@ export function HealthBar({ resource, now, apiTarget, onRefresh, showRefresh = t
       <div className="health-rail__metrics">
         <div className="health-metric" {...targetAttributes('gateway-node-id', 'status')}>
           <span className="metric-label">Cluster node</span>
-          <strong className="mono" style={{ color: '#00EC97' }}>{health ? activeNode.toUpperCase() : '—'}</strong>
+          <strong className="mono health-metric__node">{health ? activeNode.toUpperCase() : '—'}</strong>
         </div>
         <div className="health-metric" {...targetAttributes('gateway-redis-cache', 'status')}>
           <span className="metric-label">Redis cache</span>

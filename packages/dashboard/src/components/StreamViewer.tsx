@@ -68,7 +68,7 @@ export function StreamViewer({
           </div>
           {selected && <p className="field-note">{formatNumber(selected.remainingQuota)} credits available</p>}
           {!sessions.data?.length && (
-            <button type="button" className="button button--quiet" onClick={onManageSessions}>Manage sessions</button>
+            <button type="button" className="button button--quiet request-session-link" onClick={onManageSessions}>Manage sessions</button>
           )}
           <label htmlFor="stream-prompt">Prompt
             <textarea id="stream-prompt" value={prompt} onChange={event => setPrompt(event.target.value)}

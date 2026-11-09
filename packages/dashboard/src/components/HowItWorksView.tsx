@@ -97,12 +97,11 @@ export function HowItWorksView({ onNavigate }: HowItWorksViewProps) {
           <span className="guide-hero__dot" aria-hidden="true" />
           <span>OPERATOR &amp; AGENT WORKFLOW</span>
         </div>
-        <h1 className="guide-title">
+        <h2 className="guide-title">
           How to use <em>Decant</em>
-        </h1>
+        </h2>
         <p className="guide-lead">
-          A step-by-step walkthrough of the Decant compute-access gateway: from cryptographic session registration
-          and live SSE model streaming to policy circuit breakers and operator-reviewed ledger reconciliation.
+          Register a session, send a request to an AI model, and track the credits it uses.
         </p>
 
         {/* ── Quick-Start CLI Snippet ── */}

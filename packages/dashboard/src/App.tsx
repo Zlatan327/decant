@@ -50,31 +50,12 @@ export function App() {
 
   const [now, setNow] = useState(() => Date.now());
   const [activeSection, selectSection] = useState<DashboardSection>('overview');
-  const setActiveSection = (section: DashboardSection) => selectSection(section === 'shop' ? 'identity' : section);
+  const setActiveSection = (section: DashboardSection) => {
+    selectSection(section === 'shop' ? 'identity' : section);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const queryTheme = params.get('theme');
-      if (queryTheme === 'dark' || queryTheme === 'light') return queryTheme;
-      const saved = localStorage.getItem('decant-theme');
-      if (saved === 'dark' || saved === 'light') return saved;
-      if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 'light';
-    }
-    return 'dark';
-  });
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    try {
-      localStorage.setItem('decant-theme', theme);
-    } catch {}
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  };
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -231,7 +212,7 @@ export function App() {
   ];
 
   return (
-    <div className="app-shell decant-console" data-theme={theme}>
+    <div className="app-shell decant-console">
       {/* ── Mobile Sidebar Drawer ── */}
       <div
         className={`mobile-drawer-backdrop ${isMobileNavOpen ? 'mobile-drawer-backdrop--open' : ''}`}
@@ -268,6 +249,7 @@ export function App() {
                 key={cat.id}
                 type="button"
                 className={`mobile-drawer__item ${isActive ? 'mobile-drawer__item--active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => {
                   setActiveSection(cat.id);
                   setIsMobileNavOpen(false);
@@ -363,15 +345,6 @@ export function App() {
                 {isRefreshing ? 'Refreshing…' : 'Refresh'}
               </button>
 
-              <button
-                type="button"
-                className="theme-toggle-btn"
-                onClick={toggleTheme}
-                title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-                aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-              >
-                {theme === 'dark' ? 'Light' : 'Dark'}
-              </button>
             </div>
           </header>
 
@@ -500,7 +473,17 @@ export function App() {
 
                 <div className="workspace-view--single">
                   <TransactionAudit transactions={dashboard.state.transactions} />
-                  <ReservationReviewPanel onReviewed={() => void dashboard.refresh()} />
+                  {authState.role === 'operator' ? (
+                    <ReservationReviewPanel onReviewed={() => void dashboard.refresh()} />
+                  ) : (
+                    <section className="panel ledger-access">
+                      <h2>Held credits</h2>
+                      <p>Sign in as an operator to review credits held for unfinished requests.</p>
+                      <button type="button" className="button button--secondary" onClick={() => setIsAuthModalOpen(true)}>
+                        Operator sign-in
+                      </button>
+                    </section>
+                  )}
                 </div>
               </div>
             )}
