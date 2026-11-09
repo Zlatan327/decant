@@ -54,20 +54,7 @@ export class DecantGatewayServer {
       this.redis.connect().catch(() => {});
     }
 
-    try {
-      if (this.ledger.listSolvers().length === 0) {
-        this.ledger.registerSolver({
-          solverId: "decant-solver-primary.testnet",
-          endpointUrl: "https://api.decant.internal/inference",
-          modelsSupported: ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"],
-          pricePerKTokens: 1.0,
-          reputationScore: 4.95,
-          isActive: true,
-        });
-      }
-    } catch {
-      // Table may not exist yet in mocked test environments
-    }
+
 
     this.server = createServer((req, res) => this.handleRequest(req, res));
   }
@@ -304,6 +291,7 @@ export class DecantGatewayServer {
       const operatorRoute = pathname === "/v1/sessions/register"
         || pathname === "/v1/sessions"
         || pathname === "/v1/transactions"
+        || pathname === "/v1/solvers/register"
         || pathname === "/v1/reservations"
         || pathname === "/v1/reservation-reviews"
         || /^\/v1\/reservations\/[^/]+\/review$/.test(pathname)
@@ -311,7 +299,7 @@ export class DecantGatewayServer {
         || pathname === "/v1/redemptions"
         || /^\/v1\/sessions\/[^/]+\/(topup|suspend|resume)$/.test(pathname)
         || /^\/v1\/intents\/[^/]+\/fill$/.test(pathname)
-        || /^\/v1\/solvers\/[^/]+\/(earnings|reward|redeem)$/.test(pathname);
+        || /^\/v1\/solvers\/[^/]+\/(earnings|reward|redeem|toggle)$/.test(pathname);
       if (operatorRoute && !isAuthorizedAdmin(req)) {
         this.sendJson(res, this.adminKey ? 403 : 503, {
           error: this.adminKey ? "Forbidden — valid operator key required" : "Operator access is not configured",
@@ -348,63 +336,8 @@ export class DecantGatewayServer {
         return;
       }
 
-            if (pathname === "/v1/sessions/order" && method === "POST") {
-        const body = await this.parseJsonBody(req, 4 * 1024);
-        const { sessionId, publicKey, ownerAccountId, packageId, units, paymentMethod } = body;
-        if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
-          this.sendJson(res, 400, { error: "Valid sessionId is required" }, {}, req); return;
-        }
-        let creditUnits = Number(units) || 5000;
-        if (packageId === "trial") creditUnits = 1000;
-        else if (packageId === "starter") creditUnits = 5000;
-        else if (packageId === "pro") creditUnits = 25000;
-        else if (packageId === "swarm") creditUnits = 100000;
-
-        let session = this.ledger.getSession(sessionId);
-        if (!session) {
-          const keyToUse = publicKey && typeof publicKey === "string" && publicKey.trim()
-            ? publicKey.trim()
-            : `ed25519:${randomUUID().replace(/-/g, "")}`;
-          const ownerToUse = ownerAccountId && typeof ownerAccountId === "string" && ownerAccountId.trim()
-            ? ownerAccountId.trim()
-            : `${sessionId}.testnet`;
-          session = this.ledger.registerSession(sessionId, keyToUse, ownerToUse, creditUnits);
-        } else {
-          session = this.ledger.topupQuota(sessionId, creditUnits);
-        }
-
-        this.sendJson(res, 201, {
-          orderId: `ord_${Date.now()}_${randomUUID().slice(0, 6)}`,
-          status: "fulfilled",
-          session,
-          creditsProvisioned: creditUnits,
-          paymentMethod: paymentMethod || "testnet-settlement",
-          timestamp: Date.now(),
-        }, {}, req);
-        return;
-      }
-
-      if (/^\/v1\/sessions\/[^/]+\/faucet$/.test(pathname) && method === "POST") {
-        const sessionId = decodeURIComponent(pathname.split("/")[3]);
-        const session = this.ledger.getSession(sessionId);
-        if (!session) {
-          this.sendJson(res, 404, { error: `Session '${sessionId}' not found` }, {}, req);
-          return;
-        }
-        if (session.remainingQuota >= 2500) {
-          this.sendJson(res, 400, { error: "Session already has sufficient quota for testing (>= 2500 units)" }, {}, req);
-          return;
-        }
-        try {
-          const updated = this.ledger.topupQuota(sessionId, 1000);
-          this.sendJson(res, 200, {
-            session: updated,
-            claimedUnits: 1000,
-            message: "1,000 developer testnet credits added successfully",
-          }, {}, req);
-        } catch (err: any) {
-          this.sendJson(res, 500, { error: err.message }, {}, req);
-        }
+      if (method === "POST" && (pathname === "/v1/sessions/order" || /^\/v1\/sessions\/[^/]+\/faucet$/.test(pathname))) {
+        this.sendJson(res, 503, { error: "Use operator-authorized session registration or top-up to allocate local credits" }, {}, req);
         return;
       }
 
@@ -573,7 +506,7 @@ export class DecantGatewayServer {
           return;
         }
 
-        const solverId = (body.solverId || "").trim();
+        const solverId = typeof body?.solverId === "string" ? body.solverId.trim() : "";
         if (!solverId) {
           this.sendJson(res, 400, { error: "solverId is required" }, {}, req);
           return;
@@ -592,7 +525,7 @@ export class DecantGatewayServer {
 
         this.sendJson(res, 201, {
           solver,
-          message: "Compute provider registered successfully. Your node is now active and will earn credits when serving queries.",
+          message: "Compute provider registered successfully. This is a registry entry. Provider routing and earnings are pending.",
         }, {}, req);
         return;
       }

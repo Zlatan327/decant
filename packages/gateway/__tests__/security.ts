@@ -49,6 +49,29 @@ describe("Gateway authorization regressions", () => {
     }
     assert.equal(gateway.ledger.getSolverEarnings("agent-a.testnet"), 0);
   });
+  it("blocks unpaid checkout, public refills, and unauthorized provider writes", async () => {
+    const before = gateway.ledger.getSession(agent.sessionId)!.remainingQuota;
+    const admin = { "X-Decant-Admin-Key": adminKey };
+    for (const headers of [{}, admin]) {
+      assert.equal((await post("/v1/sessions/order", {
+        sessionId: agent.sessionId, packageId: "swarm", paymentMethod: "near-testnet-wallet",
+      }, headers)).status, 503);
+      assert.equal((await post(`/v1/sessions/${agent.sessionId}/faucet`, {}, headers)).status, 503);
+    }
+    assert.equal((await post("/v1/solvers/register", { solverId: "unauthorized" })).status, 403);
+    assert.equal((await post("/v1/solvers/unauthorized/toggle", {})).status, 403);
+    assert.equal(gateway.ledger.getSession(agent.sessionId)!.remainingQuota, before);
+  });
+
+  it("does not credit a registered solver for unassigned model usage", () => {
+    const solverId = "registered-solver.testnet";
+    assert.deepEqual(gateway.ledger.listSolvers(), []);
+    gateway.ledger.registerSolver({ solverId, isActive: true });
+    gateway.ledger.reserveInference("unassigned-work", agent.sessionId, 10);
+    gateway.ledger.settleInference("unassigned-work", 5, 2, 3, "provider-model", 1);
+    assert.equal(gateway.ledger.getSolverEarnings(solverId), 0);
+  });
+
   it("validates registration and does not accept fabricated key strings", async () => {
     const headers = { "X-Decant-Admin-Key": adminKey };
     assert.equal((await post("/v1/sessions/register", { sessionId: "bad-key", publicKey: "ed25519:not-a-key", quota: 100 }, headers)).status, 400);

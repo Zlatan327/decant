@@ -1,3 +1,4 @@
+import { gatewayUrl, operatorHeaders } from '../api/client';
 import { useEffect, useState } from 'react';
 import { formatNumber } from '../domain/format';
 
@@ -35,7 +36,7 @@ export function ProviderStudioView({ onSuccessNotice }: ProviderStudioViewProps)
 
   async function fetchSolvers() {
     try {
-      const res = await fetch('/v1/solvers');
+      const res = await fetch(gatewayUrl('/v1/solvers'));
       if (!res.ok) throw new Error(`Failed to load providers (HTTP ${res.status})`);
       const data = await res.json();
       setSolvers(data.solvers || []);
@@ -67,9 +68,9 @@ export function ProviderStudioView({ onSuccessNotice }: ProviderStudioViewProps)
     if (selectedProviderType === 'depin') models = ['meta-llama/Meta-Llama-3-8B-Instruct'];
 
     try {
-      const res = await fetch('/v1/solvers/register', {
+      const res = await fetch(gatewayUrl('/v1/solvers/register'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...operatorHeaders() },
         body: JSON.stringify({
           solverId: solverId.trim(),
           endpointUrl: endpointUrl.trim() || 'https://api.decant.internal',
@@ -84,9 +85,9 @@ export function ProviderStudioView({ onSuccessNotice }: ProviderStudioViewProps)
 
       setFormFeedback({
         type: 'success',
-        message: `✔ Successfully registered ${solverId}! Your provider node is now live and will continuously earn credits when serving inference.`,
+        message: `✔ Successfully registered ${solverId}! Provider routing and earnings are pending.`,
       });
-      onSuccessNotice?.(`Provider ${solverId} is now live and earning.`);
+      onSuccessNotice?.(`Provider ${solverId} was added to the registry.`);
       setApiKey('');
       await fetchSolvers();
     } catch (err) {
@@ -101,7 +102,8 @@ export function ProviderStudioView({ onSuccessNotice }: ProviderStudioViewProps)
 
   async function handleToggle(id: string) {
     try {
-      const res = await fetch(`/v1/solvers/${encodeURIComponent(id)}/toggle`, {
+      const res = await fetch(gatewayUrl(`/v1/solvers/${encodeURIComponent(id)}/toggle`), {
+        headers: operatorHeaders(),
         method: 'POST',
       });
       if (res.ok) {
@@ -116,9 +118,9 @@ export function ProviderStudioView({ onSuccessNotice }: ProviderStudioViewProps)
     setPingLoading(true);
     setPingStatus(null);
     try {
-      const res = await fetch('/v1/health');
+      const res = await fetch(gatewayUrl('/v1/health'));
       if (res.ok) {
-        setPingStatus('⚡ Node healthy: Latency 14ms · Ready to receive inference traffic');
+        setPingStatus('Gateway health check succeeded.');
       } else {
         setPingStatus('⚠️ Gateway responded with warning status');
       }
@@ -139,11 +141,11 @@ export function ProviderStudioView({ onSuccessNotice }: ProviderStudioViewProps)
           <span className="eyebrow">Compute Supply & Solver Economics</span>
           <h2>API Provider Studio</h2>
           <p className="provider-subtitle">
-            Provide your API key or compute node to Decant effortlessly. As users and autonomous agents consume inference, you continuously earn compute credits in real time.
+            Manage provider entries. Routing requests to registered providers and paying for their work are pending.
           </p>
         </div>
         <div className="provider-header__actions">
-          <span className="status-pill status-pill--healthy">TWO-SIDED MARKETPLACE</span>
+          <span className="status-pill status-pill--healthy">PROVIDER REGISTRY</span>
         </div>
       </div>
 
@@ -159,7 +161,7 @@ export function ProviderStudioView({ onSuccessNotice }: ProviderStudioViewProps)
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <span className={`status-pill status-pill--${primarySolver.isActive ? 'healthy' : 'warning'}`}>
-                {primarySolver.isActive ? '🟢 SERVING TRAFFIC & EARNING' : '⏸️ PAUSED'}
+                {primarySolver.isActive ? 'REGISTERED AS ACTIVE' : '⏸️ PAUSED'}
               </span>
               <button
                 type="button"
@@ -173,12 +175,12 @@ export function ProviderStudioView({ onSuccessNotice }: ProviderStudioViewProps)
 
           <div className="provider-metrics-grid">
             <div className="provider-metric-box">
-              <span className="metric-label">Earned Credits</span>
+              <span className="metric-label">Recorded credits (unverified)</span>
               <span className="credits-number green-text" style={{ fontSize: '1.8rem' }}>
                 +{formatNumber(primarySolver.earnedCredits || 0)}
               </span>
               <span className="field-note">
-                ≈ {(((primarySolver.earnedCredits || 0) / 10000) * 1.0).toFixed(4)} NEAR value
+                Historical ledger balance
               </span>
             </div>
 
@@ -380,7 +382,7 @@ export function ProviderStudioView({ onSuccessNotice }: ProviderStudioViewProps)
       <section className="provider-table-section">
         <div className="section-title-bar">
           <h3>Registered Provider Nodes ({solvers.length})</h3>
-          <span className="field-note">Live listing of verified compute suppliers in SQLite ACID ledger.</span>
+          <span className="field-note">Provider entries registered in the gateway ledger.</span>
         </div>
 
         {error && <p className="inline-error" role="alert">{error}</p>}
@@ -393,7 +395,7 @@ export function ProviderStudioView({ onSuccessNotice }: ProviderStudioViewProps)
                 <th>Solver Account</th>
                 <th>Status</th>
                 <th>Supported Models</th>
-                <th>Earned Credits</th>
+                <th>Recorded credits (unverified)</th>
                 <th>Reputation</th>
                 <th>Action</th>
               </tr>

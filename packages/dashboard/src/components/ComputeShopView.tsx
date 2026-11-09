@@ -1,3 +1,4 @@
+import { gatewayUrl, registerSession, topUpSession } from '../api/client';
 import { useState } from 'react';
 import { generateAgentKeypair, type GeneratedKeypair } from '../domain/crypto';
 import type { SessionRecord } from '../domain/types';
@@ -76,7 +77,6 @@ export interface PackageBundle {
   id: string;
   name: string;
   credits: number;
-  priceNear: number;
   popular?: boolean;
   tag: string;
   description: string;
@@ -88,7 +88,6 @@ export const PACKAGES: PackageBundle[] = [
     id: 'trial',
     name: 'Developer Trial',
     credits: 1000,
-    priceNear: 0,
     tag: 'FREE SANDBOX',
     description: 'Zero-cost sandbox credit allocation to test inference and streaming locally.',
     estimatedQueries: '~25 prompts',
@@ -97,7 +96,6 @@ export const PACKAGES: PackageBundle[] = [
     id: 'starter',
     name: 'Agent Starter',
     credits: 5000,
-    priceNear: 0.5,
     popular: true,
     tag: 'MOST POPULAR',
     description: 'Standard compute allocation for individual agents, autonomous bots, and scripts.',
@@ -107,7 +105,6 @@ export const PACKAGES: PackageBundle[] = [
     id: 'pro',
     name: 'Production Bot',
     credits: 25000,
-    priceNear: 2.0,
     tag: 'BEST VALUE',
     description: 'Heavy duty compute allowance for production agent pipelines and continuous tasks.',
     estimatedQueries: '~600 prompts',
@@ -116,7 +113,6 @@ export const PACKAGES: PackageBundle[] = [
     id: 'swarm',
     name: 'Autonomous Swarm',
     credits: 100000,
-    priceNear: 7.5,
     tag: 'MAX SCALE',
     description: 'High throughput allocation designed for multi-agent coordinated swarms.',
     estimatedQueries: '~2,500 prompts',
@@ -155,7 +151,6 @@ export function ComputeShopView({
   const [generatedIdentity, setGeneratedIdentity] = useState<GeneratedKeypair | null>(null);
 
   // Step 4: Checkout
-  const [paymentMethod, setPaymentMethod] = useState<'near' | 'faucet'>('faucet');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
 
@@ -165,7 +160,6 @@ export function ComputeShopView({
     sessionId: string;
     modelId: string;
     creditsProvisioned: number;
-    paymentMethod: string;
     timestamp: number;
   } | null>(null);
 
@@ -212,31 +206,15 @@ export function ComputeShopView({
     }
 
     try {
-      const response = await fetch('/v1/sessions/order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: targetSessionId,
-          publicKey: targetPublicKey || undefined,
-          ownerAccountId: targetOwner || undefined,
-          packageId: activePackage.id,
-          units: activePackage.credits,
-          paymentMethod: paymentMethod === 'near' ? 'near-testnet-wallet' : 'developer-sandbox-faucet',
-        }),
-      });
-
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error || `Failed to provision order (HTTP ${response.status})`);
-      }
-
-      const result = await response.json();
+      if (!authState.operatorKey) throw new Error('Connect as an operator to allocate local credits.');
+      const session = destinationMode === 'new'
+        ? await registerSession({ sessionId: targetSessionId, publicKey: targetPublicKey, ownerAccountId: targetOwner, quota: activePackage.credits })
+        : await topUpSession(targetSessionId, activePackage.credits);
       setOrderReceipt({
-        orderId: result.orderId,
+        orderId: session.sessionId,
         sessionId: targetSessionId,
         modelId: activeModel.id,
         creditsProvisioned: activePackage.credits,
-        paymentMethod: paymentMethod === 'near' ? 'NEAR Testnet Wallet' : 'Free Sandbox Faucet',
         timestamp: Date.now(),
       });
 
@@ -262,11 +240,9 @@ export function ComputeShopView({
       };
       if (authState.operatorKey) {
         headers['X-Decant-Admin-Key'] = authState.operatorKey;
-      } else {
-        headers['X-Decant-Admin-Key'] = '5936c9888d1fd329b49f1d0b34c3a4b6803bf9b0aec1e99008d82ee8d28c4bcc';
       }
 
-      const res = await fetch('/v1/chat/completions', {
+      const res = await fetch(gatewayUrl('/v1/chat/completions'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -508,14 +484,7 @@ export function ComputeShopView({
                   </div>
 
                   <div className="package-price">
-                    {pkg.priceNear === 0 ? (
-                      <span className="price-free">FREE TESTNET</span>
-                    ) : (
-                      <>
-                        <span className="price-amount">{pkg.priceNear} NEAR</span>
-                        <span className="price-sub">≈ ${ (pkg.priceNear * 4.8).toFixed(2) } USD</span>
-                      </>
-                    )}
+                    <span className="price-free">LOCAL CREDITS</span>
                   </div>
 
                   <p className="package-desc">{pkg.description}</p>
@@ -544,7 +513,7 @@ export function ComputeShopView({
               ← Back to Models
             </button>
             <div className="selected-summary-pill">
-              Order: <strong className="mono">{activePackage.credits.toLocaleString()} Units</strong> ({activePackage.priceNear} NEAR)
+              Order: <strong className="mono">{activePackage.credits.toLocaleString()} Units</strong>
             </div>
             <button type="button" className="button button--primary" onClick={() => setCurrentStep(3)}>
               Continue to Delivery Session →
@@ -738,56 +707,15 @@ export function ComputeShopView({
                 <div className="invoice-divider" />
 
                 <div className="invoice-row invoice-row--total">
-                  <span className="invoice-label">Total Payment:</span>
-                  <div className="invoice-total">
-                    {activePackage.priceNear === 0 ? (
-                      <span className="green-text font-bold">0.00 NEAR (Free Testnet Sandbox)</span>
-                    ) : (
-                      <span className="font-bold">{activePackage.priceNear} NEAR</span>
-                    )}
-                  </div>
+                  <span className="invoice-label">Allocation</span>
+                  <div className="invoice-total">Local credits</div>
                 </div>
               </div>
             </div>
 
-            {/* Payment Method Selector */}
             <div className="payment-method-box">
-              <h4>Choose Settlement Method</h4>
-              <div className="payment-options">
-                <label className={`payment-pill ${paymentMethod === 'faucet' ? 'payment-pill--selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="faucet"
-                    checked={paymentMethod === 'faucet'}
-                    onChange={() => setPaymentMethod('faucet')}
-                  />
-                  <div>
-                    <strong>⚡ Developer Sandbox Voucher / Faucet</strong>
-                    <p className="field-note" style={{ margin: '2px 0 0' }}>
-                      Instant 1-click testnet provisioning without spending wallet assets.
-                    </p>
-                  </div>
-                </label>
-
-                <label className={`payment-pill ${paymentMethod === 'near' ? 'payment-pill--selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="near"
-                    checked={paymentMethod === 'near'}
-                    onChange={() => setPaymentMethod('near')}
-                  />
-                  <div>
-                    <strong>Ⓝ NEAR Testnet Account Staking</strong>
-                    <p className="field-note" style={{ margin: '2px 0 0' }}>
-                      {authState.nearAccount
-                        ? `Connected: ${authState.nearAccount.accountId} (${authState.nearAccount.nearBalance} NEAR)`
-                        : 'Simulates on-chain deposit via smart contract shylibrary4027.testnet'}
-                    </p>
-                  </div>
-                </label>
-              </div>
+              <h4>Operator allocation</h4>
+              <p className="field-note">Credits are added to the gateway ledger by an operator. NEAR payments are pending integration.</p>
 
               {orderError && <p className="inline-error">{orderError}</p>}
 
@@ -795,7 +723,7 @@ export function ComputeShopView({
                 type="button"
                 className="button button--primary order-submit-btn"
                 onClick={() => void handleCompleteOrder()}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !authState.operatorKey}
               >
                 {isSubmitting ? 'Provisioning Credits in ACID Ledger…' : 'Complete Order & Provision Credits ✨'}
               </button>

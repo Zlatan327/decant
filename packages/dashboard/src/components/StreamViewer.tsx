@@ -50,7 +50,6 @@ export function StreamViewer({
   onRefreshSessions,
 }: StreamViewerProps) {
   const [lastCostUnits, setLastCostUnits] = useState<number | null>(null);
-  const [refillLoading, setRefillLoading] = useState(false);
   const DEFAULT_MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'meta-llama/Meta-Llama-3-8B-Instruct'];
   const effectiveModels = supportedModels.length > 0 ? supportedModels : DEFAULT_MODELS;
 
@@ -92,21 +91,6 @@ export function StreamViewer({
       onRefreshSessions?.();
     }
   }, [stream.status, stream.completedAt]);
-
-  async function handleQuickFaucet() {
-    if (!selectedSessionId) return;
-    setRefillLoading(true);
-    try {
-      const res = await fetch(`/v1/sessions/${encodeURIComponent(selectedSessionId)}/faucet`, { method: 'POST' });
-      if (res.ok) {
-        onRefreshSessions?.();
-      }
-    } catch {
-      // ignore
-    } finally {
-      setRefillLoading(false);
-    }
-  }
 
   const requestBytes = useMemo(
     () =>
@@ -226,16 +210,6 @@ export function StreamViewer({
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {selected.remainingQuota < 200 && (
-              <button
-                type="button"
-                className="button button--primary btn-sm"
-                onClick={() => void handleQuickFaucet()}
-                disabled={refillLoading}
-              >
-                {refillLoading ? 'Refilling…' : '⚡ 1-Click +1,000 Refill'}
-              </button>
-            )}
             {onNavigateToShop && (
               <button
                 type="button"
@@ -455,7 +429,7 @@ export function StreamViewer({
           Request, Cryptographic Signatures & Security Architecture
         </summary>
         <p className="field-note">
-          This console communicates with the Decant Gateway via signed requests and authenticated sessions. Tokens are metered atomically and settled in persistent SQLite WAL mode. On-chain quota synchronization ties off-chain session balances to the deployed NEAR contract at <code className="mono">shylibrary4027.testnet</code>.
+          This console communicates with the Decant Gateway via signed requests and authenticated sessions. Tokens are metered atomically and settled in persistent SQLite WAL mode. Credit balances are stored in the local gateway ledger.
         </p>
       </details>
     </section>

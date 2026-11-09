@@ -23,7 +23,6 @@ interface AuthModalProps {
   sessions: SessionRecord[];
 }
 
-const DEV_ADMIN_KEY = '5936c9888d1fd329b49f1d0b34c3a4b6803bf9b0aec1e99008d82ee8d28c4bcc';
 const DEV_NEAR_ACCOUNT = 'shylibrary4027.testnet';
 
 export function AuthModal({
@@ -154,7 +153,7 @@ export function AuthModal({
             className={`auth-tab ${activeTab === 'near' ? 'auth-tab--active' : ''}`}
             onClick={() => setActiveTab('near')}
           >
-            <span>Ⓝ</span> NEAR Web3 Wallet
+            <span>Ⓝ</span> NEAR Account Lookup
           </button>
           <button
             type="button"
@@ -276,17 +275,6 @@ export function AuthModal({
                 </button>
               </div>
             </form>
-
-            <div className="quick-connect-row">
-              <span className="quick-connect-label">Development:</span>
-              <button
-                type="button"
-                className="pill-btn"
-                onClick={() => handleOperatorConnect(DEV_ADMIN_KEY)}
-              >
-                Use Local Development Admin Key
-              </button>
-            </div>
 
             <p className="field-note">
               🔒 Keys are stored strictly in memory for this session and are never saved to browser localStorage or transmitted to external servers.

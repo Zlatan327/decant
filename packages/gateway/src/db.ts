@@ -364,15 +364,7 @@ export class DecantLedger {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(requestId, row.session_id, promptUnits, completionUnits, usedUnits, model, latencyMs, Date.now());
 
-      // Credit the active compute provider / solver in real time
-      try {
-        const activeSolver = this.db.prepare(`SELECT solver_id FROM solvers WHERE is_active = 1 LIMIT 1`).get() as any;
-        if (activeSolver && activeSolver.solver_id) {
-          this.recordSolverEarnings(activeSolver.solver_id, usedUnits);
-        }
-      } catch {
-        // Silently continue if solvers table is empty or uninitialized
-      }
+
     }
   }
 

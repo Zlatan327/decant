@@ -64,7 +64,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - DATABASE_PATH=/app/data/decant.db
       - DATABASE_URL=postgres://postgres:decant_secret@pgbouncer:6432/decant
-      - DECANT_ADMIN_KEY=${DECANT_ADMIN_KEY:-5936c9888d1fd329b49f1d0b34c3a4b6803bf9b0aec1e99008d82ee8d28c4bcc}
+      - DECANT_ADMIN_KEY=${DECANT_ADMIN_KEY:?Set DECANT_ADMIN_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash}
     volumes:
@@ -90,7 +90,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - DATABASE_PATH=/app/data/decant.db
       - DATABASE_URL=postgres://postgres:decant_secret@pgbouncer:6432/decant
-      - DECANT_ADMIN_KEY=${DECANT_ADMIN_KEY:-5936c9888d1fd329b49f1d0b34c3a4b6803bf9b0aec1e99008d82ee8d28c4bcc}
+      - DECANT_ADMIN_KEY=${DECANT_ADMIN_KEY:?Set DECANT_ADMIN_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash}
     volumes:
@@ -116,7 +116,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - DATABASE_PATH=/app/data/decant.db
       - DATABASE_URL=postgres://postgres:decant_secret@pgbouncer:6432/decant
-      - DECANT_ADMIN_KEY=${DECANT_ADMIN_KEY:-5936c9888d1fd329b49f1d0b34c3a4b6803bf9b0aec1e99008d82ee8d28c4bcc}
+      - DECANT_ADMIN_KEY=${DECANT_ADMIN_KEY:?Set DECANT_ADMIN_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash}
     volumes:

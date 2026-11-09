@@ -13,7 +13,7 @@ Both the gateway server and dashboard are running in the background.
 | **Dashboard UI** | [http://localhost:3000](http://localhost:3000) | Operator Console & Stream Playground |
 | **Gateway Proxy** | [http://127.0.0.1:8080](http://127.0.0.1:8080) | High-throughput reverse proxy & ACID ledger |
 | **Gateway Health** | [http://127.0.0.1:8080/health](http://127.0.0.1:8080/health) | Live runtime diagnostic probe |
-| **Operator Admin Key** | `5936c9888d1fd329b49f1d0b34c3a4b6803bf9b0aec1e99008d82ee8d28c4bcc` | Unlocks operator mutations & ledger audit |
+| **Operator Admin Key** | `YOUR_DECANT_ADMIN_KEY` | Unlocks operator mutations & ledger audit |
 | **Supported AI Models** | `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.8-flash` | Live Google Gemini streaming models |
 | **Deployed NEAR Contract** | [`shylibrary4027.testnet`](https://testnet.nearblocks.io/address/shylibrary4027.testnet) | Live on-chain quota & intent registry |
 | **Testnet Account ID** | `shylibrary4027.testnet` | 11.99 NEAR funded testnet account |
@@ -40,14 +40,14 @@ Mark each checkbox `[x]` as you test each capability.
 ### 3. Comprehensive Authentication & Logins ("Connect Identity / Wallet")
 - [ ] **Open Auth Modal**:
   - In the top navigation bar, click the **⚡ Connect Identity / Wallet** pill.
-- [ ] **Test NEAR Web3 Wallet Sign-In**:
-  - In the **Ⓝ NEAR Web3 Wallet** tab, click **Connect shylibrary4027.testnet (Deployed Contract)** shortcut.
+- [ ] **Test NEAR account lookup**:
+  - In the **NEAR Account Lookup** tab, click **Connect shylibrary4027.testnet (Deployed Contract)** shortcut.
   - Notice real-time FastNEAR RPC query fetching live balance: `11.99 NEAR`.
   - Notice on-chain quota inspection: `agent-production-01` (`5,000 / 5,000 units`).
   - Notice top bar pill updates to: `Ⓝ shylibrary4027.testnet (11.99 N)`.
 - [ ] **Test Operator Admin Sign-In**:
   - Open modal again, switch to **🛡️ Operator Admin** tab.
-  - Click **Use Local Development Admin Key** and click **Authenticate**.
+  - Enter the key configured in the gateway environment and click **Authenticate**.
   - Notice top bar updates to: `🛡️ Operator Active`.
 - [ ] **Test Disconnect / Switch Role**:
   - Open modal and click **Disconnect** to verify clean state reset to Guest mode.
@@ -118,7 +118,7 @@ Invoke-RestMethod -Uri http://127.0.0.1:8080/health
 
 # 2. Test live streaming with gemini-3.5-flash-lite
 Invoke-RestMethod -Uri http://127.0.0.1:8080/v1/chat/completions -Method Post -Headers @{
-  "X-Decant-Admin-Key"="5936c9888d1fd329b49f1d0b34c3a4b6803bf9b0aec1e99008d82ee8d28c4bcc";
+  "X-Decant-Admin-Key"="YOUR_DECANT_ADMIN_KEY";
   "X-Decant-Session"="agent-alpha-demo";
   "Content-Type"="application/json"
 } -Body '{"model":"gemini-3.5-flash-lite","max_tokens":40,"messages":[{"role":"user","content":"Say hi in 3 words"}]}'
