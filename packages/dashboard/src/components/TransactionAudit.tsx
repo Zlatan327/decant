@@ -7,9 +7,10 @@ const PAGE_SIZE = 25;
 
 interface TransactionAuditProps {
   transactions: ApiResource<TransactionRecord[]>;
+  title?: string;
 }
 
-export function TransactionAudit({ transactions }: TransactionAuditProps) {
+export function TransactionAudit({ transactions, title = 'Credit history' }: TransactionAuditProps) {
   const [filter, setFilter] = useState('');
   const [page, setPage] = useState(0);
   const rows = transactions.data ?? [];
@@ -56,14 +57,14 @@ export function TransactionAudit({ transactions }: TransactionAuditProps) {
     dlAnchor.click();
   };
 
-  let emptyTitle = 'No transaction records returned';
-  let emptyDescription = 'The gateway has not returned any credit transaction rows for this view.';
+  let emptyTitle = 'No requests yet';
+  let emptyDescription = 'Completed requests will appear here.';
   if (transactions.status === 'loading' && rows.length === 0) {
     emptyTitle = 'Loading gateway records';
     emptyDescription = 'Waiting for the transaction snapshot to return.';
   } else if ((transactions.status === 'error' || transactions.status === 'unavailable') && rows.length === 0) {
     emptyTitle = 'Ledger unavailable';
-    emptyDescription = 'The gateway transaction source is unavailable. This is not evidence that no transactions exist.';
+    emptyDescription = 'Check your operator access and try refreshing.';
   } else if (transactions.status === 'stale' && rows.length === 0) {
     emptyTitle = 'No current records available';
     emptyDescription = 'The latest transaction snapshot could not be refreshed.';
@@ -77,7 +78,7 @@ export function TransactionAudit({ transactions }: TransactionAuditProps) {
       <div className="panel-heading audit-panel__heading">
         <div>
           <p className="eyebrow">GATEWAY LEDGER</p>
-          <h2 id="audit-heading">Credit transaction audit</h2>
+          <h2 id="audit-heading">{title}</h2>
         </div>
         <div className="audit-panel__actions">
           <span className="source-badge">{scopeLabel}</span>

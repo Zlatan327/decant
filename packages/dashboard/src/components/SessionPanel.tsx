@@ -304,7 +304,7 @@ export function SessionPanel({
             onClick={handleGenerateKeys}
             title="Generate a new Ed25519 keypair for autonomous agents"
           >
-            ⚡ Generate Keypair
+            Generate Keypair
           </button>
           <button
             type="button"
@@ -313,7 +313,7 @@ export function SessionPanel({
             data-render-target="open-register-session"
             data-motion-trigger="interaction"
           >
-            {registerOpen ? 'Cancel' : 'Enroll Session'}
+            {registerOpen ? 'Cancel' : 'Register session'}
           </button>
         </div>
       </div>
@@ -321,7 +321,7 @@ export function SessionPanel({
       {generatedIdentity && (
         <div className="generated-key-banner" style={{ background: 'rgba(0, 236, 151, 0.08)', border: '1px solid rgba(0, 236, 151, 0.25)', borderRadius: '10px', padding: '12px 14px', margin: '14px 0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <strong style={{ color: 'var(--near-green)', fontSize: '0.82rem' }}>⚡ Cryptographic Identity Generated</strong>
+            <strong style={{ color: 'var(--near-green)', fontSize: '0.82rem' }}>Session key generated</strong>
             <button type="button" className="button button--quiet button--small" onClick={() => setGeneratedIdentity(null)}>Dismiss</button>
           </div>
           <p style={{ margin: '0 0 6px', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.8)' }}>

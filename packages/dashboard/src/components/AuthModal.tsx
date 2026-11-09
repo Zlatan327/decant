@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { errorMessage } from '../api/client';
 import { fetchContractQuota, fetchNearAccount, type NearAccountInfo, type NearContractQuota } from '../api/near';
 import { generateAgentKeypair, type GeneratedKeypair } from '../domain/crypto';
 import type { SessionRecord } from '../domain/types';
@@ -17,7 +18,7 @@ interface AuthModalProps {
   onClose: () => void;
   authState: AuthState;
   onConnectNear: (account: NearAccountInfo) => void;
-  onConnectOperator: (key: string) => void;
+  onConnectOperator: (key: string) => Promise<void>;
   onConnectAgent: (sessionId: string) => void;
   onDisconnect: () => void;
   sessions: SessionRecord[];
@@ -35,13 +36,15 @@ export function AuthModal({
   onDisconnect,
   sessions,
 }: AuthModalProps) {
-  const [activeTab, setActiveTab] = useState<'near' | 'operator' | 'agent'>('near');
+  const [activeTab, setActiveTab] = useState<'near' | 'operator' | 'agent'>('operator');
   const [nearInput, setNearInput] = useState('');
   const [nearLoading, setNearLoading] = useState(false);
   const [nearError, setNearError] = useState<string | null>(null);
   const [contractQuota, setContractQuota] = useState<NearContractQuota | null>(null);
 
   const [operatorInput, setOperatorInput] = useState('');
+  const [operatorError, setOperatorError] = useState('');
+  const [operatorPending, setOperatorPending] = useState(false);
   const [agentInput, setAgentInput] = useState('');
   const [generatedKey, setGeneratedKey] = useState<GeneratedKeypair | null>(null);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
@@ -72,12 +75,20 @@ export function AuthModal({
     }
   }
 
-  function handleOperatorConnect(keyToUse?: string) {
-    const key = (keyToUse || operatorInput).trim();
-    if (!key) return;
-    onConnectOperator(key);
-    setOperatorInput('');
-    onClose();
+  async function handleOperatorConnect() {
+    const key = operatorInput.trim();
+    if (!key || operatorPending) return;
+    setOperatorPending(true);
+    setOperatorError('');
+    try {
+      await onConnectOperator(key);
+      setOperatorInput('');
+      onClose();
+    } catch (failure) {
+      setOperatorError(errorMessage(failure));
+    } finally {
+      setOperatorPending(false);
+    }
   }
 
   function handleAgentConnect(sessionIdToUse?: string) {
@@ -119,22 +130,22 @@ export function AuthModal({
             <div className="auth-status-banner__role">
               {authState.role === 'near-wallet' && (
                 <span className="identity-pill identity-pill--near">
-                  Ⓝ {authState.nearAccount?.accountId} · {authState.nearAccount?.nearBalance} NEAR
+                  {authState.nearAccount?.accountId} · {authState.nearAccount?.nearBalance} NEAR
                 </span>
               )}
               {authState.role === 'operator' && (
                 <span className="identity-pill identity-pill--operator">
-                  🛡️ Gateway Node Operator (Admin Verified)
+                  Operator access verified
                 </span>
               )}
               {authState.role === 'agent' && (
                 <span className="identity-pill identity-pill--agent">
-                  🤖 Agent Session: {authState.agentSessionId}
+                  Agent Session: {authState.agentSessionId}
                 </span>
               )}
               {authState.role === 'guest' && (
                 <span className="identity-pill identity-pill--guest">
-                  ⚪ Guest / Read-Only Mode
+                  Guest / Read-Only Mode
                 </span>
               )}
             </div>
@@ -153,21 +164,21 @@ export function AuthModal({
             className={`auth-tab ${activeTab === 'near' ? 'auth-tab--active' : ''}`}
             onClick={() => setActiveTab('near')}
           >
-            <span>Ⓝ</span> NEAR Account Lookup
+             NEAR Account Lookup
           </button>
           <button
             type="button"
             className={`auth-tab ${activeTab === 'operator' ? 'auth-tab--active' : ''}`}
             onClick={() => setActiveTab('operator')}
           >
-            <span>🛡️</span> Operator Admin
+             Operator Admin
           </button>
           <button
             type="button"
             className={`auth-tab ${activeTab === 'agent' ? 'auth-tab--active' : ''}`}
             onClick={() => setActiveTab('agent')}
           >
-            <span>🤖</span> Agent Keypair
+             Agent Keypair
           </button>
         </div>
 
@@ -251,17 +262,17 @@ export function AuthModal({
         {activeTab === 'operator' && (
           <div className="auth-tab-content">
             <p className="tab-desc">
-              Authenticate as the gateway node operator using your server secret key. Enables session registration, credit top-ups, reservation recovery, and full ACID ledger inspection.
+              Enter the operator key to register sessions, add credits, and review the ledger.
             </p>
 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                handleOperatorConnect();
+                void handleOperatorConnect();
               }}
               className="auth-form"
             >
-              <label htmlFor="operator-key-modal">Gateway Operator Secret Key</label>
+              <label htmlFor="operator-key-modal">Operator key</label>
               <div className="input-with-action">
                 <input
                   id="operator-key-modal"
@@ -270,14 +281,15 @@ export function AuthModal({
                   value={operatorInput}
                   onChange={(e) => setOperatorInput(e.target.value)}
                 />
-                <button type="submit" className="button button--primary" disabled={!operatorInput.trim()}>
-                  Authenticate
+                <button type="submit" className="button button--primary" disabled={!operatorInput.trim() || operatorPending}>
+                  {operatorPending ? 'Checking…' : 'Authenticate'}
                 </button>
               </div>
             </form>
 
+            {operatorError && <p className="inline-error" role="alert">{operatorError}</p>}
             <p className="field-note">
-              🔒 Keys are stored strictly in memory for this session and are never saved to browser localStorage or transmitted to external servers.
+              Your key is kept in memory and sent to the configured gateway to authorize requests.
             </p>
           </div>
         )}
@@ -326,7 +338,7 @@ export function AuthModal({
                   className="button button--secondary"
                   onClick={() => void handleGenerateKeypair()}
                 >
-                  ⚡ Generate New Keypair
+                  Generate New Keypair
                 </button>
               </div>
 
@@ -381,7 +393,7 @@ export function AuthModal({
                 </div>
               )}
 
-              {copyNotice && <div className="copy-toast">✔ {copyNotice}</div>}
+              {copyNotice && <div className="copy-toast">{copyNotice}</div>}
             </div>
           </div>
         )}

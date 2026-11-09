@@ -1,8 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { gatewayTargetLabel, setOperatorKey } from './api/client';
+import { gatewayTargetLabel, requestJson, setOperatorKey } from './api/client';
 import { ActivityFeed } from './components/ActivityFeed';
 import { DecantLogoMark } from './components/DecantLogo';
-import { CentralMinimalistHero } from './components/CentralMinimalistHero';
 import { ValueAccrualCard } from './components/ValueAccrualCard';
 import { HowItWorksView } from './components/HowItWorksView';
 import { HealthBar } from './components/HealthBar';
@@ -13,7 +12,6 @@ import { ReservationReviewPanel } from './components/ReservationReviewPanel';
 import { TransactionAudit } from './components/TransactionAudit';
 import { AuthModal, type AuthState } from './components/AuthModal';
 import { NearContractInspector } from './components/NearContractInspector';
-import { ComputeShopView } from './components/ComputeShopView';
 import { ProviderStudioView } from './components/ProviderStudioView';
 import type { NearAccountInfo } from './api/near';
 import type { DashboardSection } from './components/SidebarNav';
@@ -27,47 +25,16 @@ interface NavCategory {
   icon: ReactNode;
 }
 
-const CATEGORY_HEADERS: Record<string, { headline: string; tagline: string }> = {
-  overview: {
-    headline: 'decentralized<br />intent gateway',
-    tagline: 'Autonomous AI compute credit routing & settlement on NEAR.'
-  },
-  shop: {
-    headline: 'compute<br />store',
-    tagline: 'Browse verified AI models, select inference tiers, and fund compute sessions.'
-  },
-  request: {
-    headline: 'live<br />inference',
-    tagline: 'Stream tokens with real-time telemetry and atomic credit settlement.'
-  },
-  provider: {
-    headline: 'solver<br />supply',
-    tagline: 'Register compute nodes, stake capacity, and fulfill agent inference requests.'
-  },
-  identity: {
-    headline: 'identity<br />ledger',
-    tagline: 'Manage Ed25519 session keys, allocate credit quotas, and top up balances.'
-  },
-  accounting: {
-    headline: 'settlement<br />audit',
-    tagline: 'Persistent ledger records, solver proof-of-execution, and verifiable transactions.'
-  },
-  value: {
-    headline: 'compute<br />value',
-    tagline: 'Solver credit accrual and verifiable USDT redemption ledger.'
-  },
-  routing: {
-    headline: 'intent<br />registry',
-    tagline: 'Decentralized compute intents, solver bidding, and verified fulfillment commitments.'
-  },
-  guide: {
-    headline: 'protocol<br />guide',
-    tagline: 'Architecture breakdown, session security models, and NEAR contract integration.'
-  },
-  evidence: {
-    headline: 'evidence<br />records',
-    tagline: 'Cryptographic proof logs, validation claims, and state commitments.'
-  }
+const CATEGORY_HEADERS: Partial<Record<DashboardSection, { headline: string; tagline: string }>> = {
+  overview: { headline: 'Decant', tagline: 'Run AI requests and track compute credits.' },
+  request: { headline: 'Run inference', tagline: 'Send a request and see how many credits it uses.' },
+  provider: { headline: 'Providers', tagline: 'View and manage registered providers.' },
+  identity: { headline: 'Sessions', tagline: 'Register agent keys and allocate local credits.' },
+  accounting: { headline: 'Ledger', tagline: 'Review credit usage and held credits.' },
+  value: { headline: 'Solver credits', tagline: 'View local solver credit records.' },
+  routing: { headline: 'Routing', tagline: 'Review compute intents and inspect the NEAR testnet contract.' },
+  guide: { headline: 'Guide', tagline: 'Get started with the gateway.' },
+  evidence: { headline: 'Activity', tagline: 'Review requests observed by the gateway.' },
 };
 
 export function App() {
@@ -82,10 +49,10 @@ export function App() {
   });
 
   const [now, setNow] = useState(() => Date.now());
-  const [activeSection, setActiveSection] = useState<DashboardSection>('overview');
+  const [activeSection, selectSection] = useState<DashboardSection>('overview');
+  const setActiveSection = (section: DashboardSection) => selectSection(section === 'shop' ? 'identity' : section);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string | undefined>(undefined);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -124,14 +91,18 @@ export function App() {
   };
 
   const handleConnectNear = (account: NearAccountInfo) => {
+    setOperatorKey('');
     setAuthState((prev) => ({
       ...prev,
       role: 'near-wallet',
+      operatorKey: '',
       nearAccount: account,
     }));
+    void dashboard.refresh();
   };
 
-  const handleConnectOperator = (key: string) => {
+  const handleConnectOperator = async (key: string) => {
+    await requestJson('/v1/sessions', { headers: { 'X-Decant-Admin-Key': key } });
     setOperatorKey(key);
     setAuthState((prev) => ({
       ...prev,
@@ -142,12 +113,15 @@ export function App() {
   };
 
   const handleConnectAgent = (sessionId: string) => {
+    setOperatorKey('');
     dashboard.selectSession(sessionId);
     setAuthState((prev) => ({
       ...prev,
       role: 'agent',
+      operatorKey: '',
       agentSessionId: sessionId,
     }));
+    void dashboard.refresh();
   };
 
   const handleDisconnect = () => {
@@ -181,7 +155,7 @@ export function App() {
   const categories: NavCategory[] = [
     {
       id: 'overview',
-      label: 'overview',
+      label: 'Overview',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -192,19 +166,8 @@ export function App() {
       ),
     },
     {
-      id: 'shop',
-      label: 'store',
-      icon: (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="9" cy="21" r="1" />
-          <circle cx="20" cy="21" r="1" />
-          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-        </svg>
-      ),
-    },
-    {
       id: 'request',
-      label: 'inference',
+      label: 'Inference',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="4 17 10 11 4 5" />
@@ -214,7 +177,7 @@ export function App() {
     },
     {
       id: 'provider',
-      label: 'supply',
+      label: 'Providers',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
@@ -223,7 +186,7 @@ export function App() {
     },
     {
       id: 'identity',
-      label: 'sessions',
+      label: 'Sessions',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" />
@@ -234,7 +197,7 @@ export function App() {
     },
     {
       id: 'accounting',
-      label: 'ledger',
+      label: 'Ledger',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -244,7 +207,7 @@ export function App() {
     },
     {
       id: 'routing',
-      label: 'routing',
+      label: 'Routing',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="6" cy="6" r="3" />
@@ -256,7 +219,7 @@ export function App() {
     },
     {
       id: 'guide',
-      label: 'guide',
+      label: 'Guide',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="9" />
@@ -268,7 +231,7 @@ export function App() {
   ];
 
   return (
-    <div className="app-shell" data-theme={theme}>
+    <div className="app-shell decant-console" data-theme={theme}>
       {/* ── Mobile Sidebar Drawer ── */}
       <div
         className={`mobile-drawer-backdrop ${isMobileNavOpen ? 'mobile-drawer-backdrop--open' : ''}`}
@@ -278,7 +241,7 @@ export function App() {
       <aside
         id="mobile-drawer"
         className={`mobile-drawer ${isMobileNavOpen ? 'mobile-drawer--open' : ''}`}
-        aria-label="Mobile Navigation"
+        aria-label="Workspace navigation"
       >
         <div className="mobile-drawer__header">
           <div className="brand-lockup">
@@ -297,7 +260,7 @@ export function App() {
             ✕
           </button>
         </div>
-        <nav className="mobile-drawer__nav">
+        <nav className="mobile-drawer__nav" aria-label="Workspace sections">
           {categories.map((cat) => {
             const isActive = activeSection === cat.id;
             return (
@@ -374,7 +337,11 @@ export function App() {
               })}
             </nav>
 
+            <span className="workspace-location">Workspace / {categories.find(category => category.id === activeSection)?.label ?? CATEGORY_HEADERS[activeSection]?.headline}</span>
             <div className="topbar__meta">
+              <button type="button" className="button button--quiet operator-access" onClick={() => setIsAuthModalOpen(true)}>
+                {authState.role === 'operator' ? 'Operator settings' : 'Operator access'}
+              </button>
               <span
                 className={`connection-chip connection-chip--${gatewayTone}`}
                 data-status={gatewayTone}
@@ -403,48 +370,25 @@ export function App() {
                 title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
                 aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
               >
-                {theme === 'dark' ? '☀️' : '🌙'}
+                {theme === 'dark' ? 'Light' : 'Dark'}
               </button>
             </div>
           </header>
 
           <main id="main-content" className="app-main" {...targetAttributes('decant-main-content', 'none')}>
-            {activeSection !== 'overview' && (
-              <header className="category-hero-header">
-                <h1
-                  className="category-hero-header__title"
-                  dangerouslySetInnerHTML={{ __html: CATEGORY_HEADERS[activeSection]?.headline || activeSection }}
-                />
-                <p className="category-hero-header__tagline">
-                  {CATEGORY_HEADERS[activeSection]?.tagline}
-                </p>
-              </header>
-            )}
-            {/* ── Section 0: Compute Store (Wholesome Shopping Flow) ── */}
-            {activeSection === 'shop' && (
-              <div className="workspace-view" key="shop">
-                <ComputeShopView
-                  sessions={dashboard.state.sessions.data ?? []}
-                  authState={authState}
-                  onOrderCompleted={(sessionId, modelId) => {
-                    dashboard.selectSession(sessionId);
-                    setSelectedModel(modelId);
-                  }}
-                  onNavigateToPlayground={(sessionId, modelId) => {
-                    dashboard.selectSession(sessionId);
-                    setSelectedModel(modelId);
-                    setActiveSection('request');
-                  }}
-                  onRefreshData={dashboard.refresh}
-                  onRunTestPrompt={dashboard.runInference}
-                />
-              </div>
-            )}
+            <header className="console-page-heading">
+              <h1>{CATEGORY_HEADERS[activeSection]?.headline}</h1>
+              <p>{CATEGORY_HEADERS[activeSection]?.tagline}</p>
+              {activeSection === 'overview' && (
+                <button type="button" className="button button--primary" onClick={() => setActiveSection('request')}>Run inference</button>
+              )}
+            </header>
 
             {/* ── Provider Studio View ── */}
             {activeSection === 'provider' && (
               <div className="workspace-view" key="provider">
                 <ProviderStudioView
+                  canManage={authState.role === 'operator'}
                   onSuccessNotice={() => void dashboard.refresh()}
                 />
               </div>
@@ -453,13 +397,6 @@ export function App() {
             {/* ── Section 1: Overview ── */}
             {activeSection === 'overview' && (
               <div className="workspace-view" key="overview">
-                <CentralMinimalistHero
-                  onNavigate={(section, model) => {
-                    setActiveSection(section);
-                    if (model) setSelectedModel(model);
-                  }}
-                />
-
                 <HealthBar
                   resource={dashboard.state.health}
                   now={now}
@@ -493,17 +430,6 @@ export function App() {
             {/* ── Section 3: Compute-to-Value (USDT Redemption) ── */}
             {activeSection === 'value' && (
               <div className="workspace-view" key="value">
-                <div className="workspace-header">
-                  <div>
-                    <div className="workspace-header__title">
-                      <h2>Compute-to-Value Engine</h2>
-                      <span className="source-badge">LOCAL CREDIT RECORDS</span>
-                    </div>
-                    <p className="workspace-header__desc">
-                      View recorded solver credits. Verified rewards and USDT payouts are not connected yet.
-                    </p>
-                  </div>
-                </div>
                 <ValueAccrualCard onSuccess={() => void dashboard.refresh()} />
                 <TransactionAudit transactions={dashboard.state.transactions} />
               </div>
@@ -512,17 +438,6 @@ export function App() {
             {/* ── Section 4: Identity & Credit ── */}
             {activeSection === 'identity' && (
               <div className="workspace-view" key="identity">
-                <div className="workspace-header">
-                  <div>
-                    <div className="workspace-header__title">
-                      <h2>Identity / credit</h2>
-                      <span className="source-badge">SESSION LEDGER</span>
-                    </div>
-                    <p className="workspace-header__desc">
-                      Ed25519 cryptographic public keys, compute-credit quota allocation, and active balance replenishment.
-                    </p>
-                  </div>
-                </div>
 
                 <div className="workspace-view--split">
                   <SessionPanel
@@ -546,60 +461,23 @@ export function App() {
             {/* ── Section 5: Session-Scoped Request (Inference Stream) ── */}
             {activeSection === 'request' && (
               <div className="workspace-view" key="request">
-                <div className="workspace-header">
-                  <div>
-                    <div className="workspace-header__title">
-                      <h2>AI Inference Playground</h2>
-                      <span className="source-badge">LIVE STREAMING</span>
-                    </div>
-                    <p className="workspace-header__desc">
-                      Select your preferred Gemini or DePIN model, adjust output parameters, and stream live tokens with atomic credit settlement.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="workspace-view--split">
-                  <SessionPanel
-                    sessions={dashboard.state.sessions}
-                    sessionDetail={dashboard.state.sessionDetail}
-                    selectedSessionId={dashboard.state.selectedSessionId}
-                    trackedSessionIds={dashboard.state.trackedSessionIds}
-                    onSelect={dashboard.selectSession}
-                    onTrack={dashboard.trackSession}
-                    onUntrack={dashboard.untrackSession}
-                    onRegister={dashboard.registerSession}
-                    onTopUp={dashboard.topUpSession}
-                    onSuspend={dashboard.suspendSession}
-                    onResume={dashboard.resumeSession}
-                  />
-                  <StreamViewer
-                    sessions={dashboard.state.sessions}
-                    selectedSessionId={dashboard.state.selectedSessionId}
-                    stream={dashboard.state.stream}
-                    now={now}
-                    initialModel={selectedModel}
-                    models={dashboard.state.health.data?.models}
-                    onSelectSession={dashboard.selectSession}
-                    onRun={dashboard.runInference}
-                  />
-                </div>
+                <StreamViewer
+                  sessions={dashboard.state.sessions}
+                  selectedSessionId={dashboard.state.selectedSessionId}
+                  stream={dashboard.state.stream}
+                  now={now}
+                  models={dashboard.state.health.data?.inferenceConfigured ? dashboard.state.health.data.models : []}
+                  onSelectSession={dashboard.selectSession}
+                  onRun={dashboard.runInference}
+                  onManageSessions={() => setActiveSection('identity')}
+                />
+                <TransactionAudit transactions={dashboard.state.transactions} title="Recent requests" />
               </div>
             )}
 
             {/* ── Section 6: Routing & Settlement (Intent Board) ── */}
             {activeSection === 'routing' && (
               <div className="workspace-view" key="routing">
-                <div className="workspace-header">
-                  <div>
-                    <div className="workspace-header__title">
-                      <h2>Routing / settlement</h2>
-                      <span className="source-badge">INTENT REGISTRY</span>
-                    </div>
-                    <p className="workspace-header__desc">
-                      Decentralized compute intents: broadcast agent requirements, match with DePIN solver nodes, and verify fulfillment commitments.
-                    </p>
-                  </div>
-                </div>
 
                 <NearContractInspector />
 
@@ -619,17 +497,6 @@ export function App() {
             {/* ── Section 7: Accounting & Reconciliation (Transaction Audit) ── */}
             {activeSection === 'accounting' && (
               <div className="workspace-view" key="accounting">
-                <div className="workspace-header">
-                  <div>
-                    <div className="workspace-header__title">
-                      <h2>Accounting / reconciliation</h2>
-                      <span className="source-badge">SQLITE ACID LEDGER</span>
-                    </div>
-                    <p className="workspace-header__desc">
-                      Gateway records of estimated input/output credit units, provider latency, and credit use.
-                    </p>
-                  </div>
-                </div>
 
                 <div className="workspace-view--single">
                   <TransactionAudit transactions={dashboard.state.transactions} />
@@ -641,17 +508,6 @@ export function App() {
             {/* ── Section 8: Observed Evidence (Telemetry & Gateway Logs) ── */}
             {activeSection === 'evidence' && (
               <div className="workspace-view" key="evidence">
-                <div className="workspace-header">
-                  <div>
-                    <div className="workspace-header__title">
-                      <h2>Observed evidence</h2>
-                      <span className="source-badge">GATEWAY TELEMETRY</span>
-                    </div>
-                    <p className="workspace-header__desc">
-                      Directly observed gateway status codes, anti-tamper verifications, and security policy checks.
-                    </p>
-                  </div>
-                </div>
 
                 <HealthBar
                   resource={dashboard.state.health}
@@ -670,7 +526,7 @@ export function App() {
 
           <footer className="app-footer" {...targetAttributes('decant-observability-boundary', 'status')}>
             <span>DECANT / OPERATIONS</span>
-            <span>Gateway records, live NEAR smart contract & real-time Gemini streaming</span>
+            <span>Gateway records and NEAR testnet reads</span>
             <span className="mono">
               {hasHealthData
                 ? dashboard.state.health.status === 'stale'
