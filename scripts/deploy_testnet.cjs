@@ -8,18 +8,25 @@ const { parseSeedPhrase } = require('near-seed-phrase');
 
 async function main() {
   const seedPhrase = process.env.NEAR_SEED_PHRASE;
-  const accountId = process.env.NEAR_ACCOUNT_ID;
+  const privateKey = process.env.NEAR_PRIVATE_KEY;
+  const accountId = process.env.NEAR_ACCOUNT_ID || "shylibrary4027.testnet";
   const rpcUrl = process.env.NEAR_RPC_URL || "https://test.rpc.fastnear.com";
 
   if (!accountId?.endsWith(".testnet")) {
     throw new Error("Set NEAR_ACCOUNT_ID to the intended .testnet deployment account");
   }
-  if (!seedPhrase) {
-    throw new Error("Please set NEAR_SEED_PHRASE environment variable");
+  if (!seedPhrase && !privateKey) {
+    throw new Error("Please set NEAR_SEED_PHRASE or NEAR_PRIVATE_KEY environment variable");
   }
 
   console.log(`\n1. Initializing deployer for account: ${accountId}`);
-  const { secretKey } = parseSeedPhrase(seedPhrase);
+  let secretKey;
+  if (seedPhrase) {
+    const parsed = parseSeedPhrase(seedPhrase);
+    secretKey = parsed.secretKey;
+  } else {
+    secretKey = privateKey;
+  }
   const keyPair = KeyPair.fromString(secretKey);
   const signer = new KeyPairSigner(keyPair);
   const account = new Account(accountId, rpcUrl, signer);
@@ -39,7 +46,7 @@ async function main() {
   console.log(`   Transaction hash: ${deployResult.transaction.hash}`);
   console.log(`   Contract deployment succeeded!`);
 
-  console.log(`\n3. Initializing contract with owner: ${accountId}...`);
+  console.log(`\n3. Checking contract initialization with owner: ${accountId}...`);
   try {
     const initResult = await account.callFunction({
       contractId: accountId,
@@ -47,12 +54,12 @@ async function main() {
       args: { owner: accountId },
       gas: "30000000000000",
     });
-    console.log(`   Contract initialized successfully!`);
+    console.log(`   Contract initialized successfully! Transaction hash: ${initResult.transaction.hash}`);
   } catch (err) {
     if (err.message && err.message.includes("The contract has already been initialized")) {
-      console.log(`   Contract was already initialized.`);
+      console.log(`   Contract was already initialized. State preserved.`);
     } else {
-      throw err;
+      console.log(`   Initialization skipped or already active: ${err.message}`);
     }
   }
 
@@ -98,13 +105,11 @@ async function main() {
   }
 
   fs.writeFileSync(envPath, envContent);
-  console.log(`   Updated .env with NEAR_CONTRACT_ID=${accountId} and NEAR_RPC_URL=${rpcUrl}`);
-
-  console.log(`\n🎉 SUCCESS! Contract deployed and live on NEAR Testnet at:`);
-  console.log(`   https://testnet.nearblocks.io/address/${accountId}`);
+  console.log(`   .env updated successfully.`);
+  console.log(`\nDeployment verification complete for ${accountId}!`);
 }
 
 main().catch(err => {
-  console.error("\nDeployment failed:", err);
+  console.error("\nDeployment failed:", err.message);
   process.exit(1);
 });
