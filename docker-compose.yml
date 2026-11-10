@@ -38,7 +38,7 @@ services:
       - PORT=8080
       - HOST=0.0.0.0
       - REDIS_URL=redis://redis:6379
-      - DATABASE_PATH=/app/data/decant.db
+      - DATABASE_URL=postgres://decant:decant_secret@postgres:5432/decant
       - DECANT_ADMIN_KEY=${DECANT_ADMIN_KEY:?Set DECANT_ADMIN_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - UPSTREAM_BASE_URL=${UPSTREAM_BASE_URL:-}
@@ -46,10 +46,10 @@ services:
       - UPSTREAM_API_KEY=${UPSTREAM_API_KEY:-}
       - LOAD_BALANCER_ACTIVE=true
       - GEMINI_MODEL=${GEMINI_MODEL:-}
-    volumes:
-      - gateway-data:/app/data
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - decant-net
@@ -65,7 +65,7 @@ services:
       - PORT=8080
       - HOST=0.0.0.0
       - REDIS_URL=redis://redis:6379
-      - DATABASE_PATH=/app/data/decant.db
+      - DATABASE_URL=postgres://decant:decant_secret@postgres:5432/decant
       - DECANT_ADMIN_KEY=${DECANT_ADMIN_KEY:?Set DECANT_ADMIN_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - UPSTREAM_BASE_URL=${UPSTREAM_BASE_URL:-}
@@ -73,10 +73,10 @@ services:
       - UPSTREAM_API_KEY=${UPSTREAM_API_KEY:-}
       - LOAD_BALANCER_ACTIVE=true
       - GEMINI_MODEL=${GEMINI_MODEL:-}
-    volumes:
-      - gateway-data:/app/data
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - decant-net
@@ -92,7 +92,7 @@ services:
       - PORT=8080
       - HOST=0.0.0.0
       - REDIS_URL=redis://redis:6379
-      - DATABASE_PATH=/app/data/decant.db
+      - DATABASE_URL=postgres://decant:decant_secret@postgres:5432/decant
       - DECANT_ADMIN_KEY=${DECANT_ADMIN_KEY:?Set DECANT_ADMIN_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - UPSTREAM_BASE_URL=${UPSTREAM_BASE_URL:-}
@@ -100,15 +100,34 @@ services:
       - UPSTREAM_API_KEY=${UPSTREAM_API_KEY:-}
       - LOAD_BALANCER_ACTIVE=true
       - GEMINI_MODEL=${GEMINI_MODEL:-}
-    volumes:
-      - gateway-data:/app/data
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - decant-net
 
-  # ── Tier 3: Distributed State & Cache (Redis) ────────────────────────────
+  # ── Tier 3: Primary Relational Ledger (PostgreSQL 16) ───────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: decant-postgres-ledger
+    environment:
+      - POSTGRES_USER=decant
+      - POSTGRES_PASSWORD=decant_secret
+      - POSTGRES_DB=decant
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U decant -d decant"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - decant-net
+
+  # ── Tier 4: Distributed State & Cache (Redis) ────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: decant-redis-cache
@@ -125,7 +144,7 @@ services:
 
 volumes:
   dashboard-dist:
-  gateway-data:
+  postgres-data:
   redis-data:
 
 networks:

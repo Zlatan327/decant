@@ -65,7 +65,37 @@ export interface ReservationReview {
   providerWorkStopped: boolean;
 }
 
-export class DecantLedger {
+export interface IDecantLedger {
+  claimSignature(signature: string, timestamp: number): Promise<boolean> | boolean;
+  registerSession(sessionId: string, publicKey: string, ownerAccountId: string, quota: number): Promise<SessionRecord> | SessionRecord;
+  getSession(sessionId: string): Promise<SessionRecord | null> | SessionRecord | null;
+  listSessions(): Promise<SessionRecord[]> | SessionRecord[];
+  reserveInference(requestId: string, sessionId: string, units: number): Promise<void> | void;
+  settleInference(requestId: string, usedUnits: number, promptUnits: number, completionUnits: number, model: string, latencyMs: number): Promise<void> | void;
+  reviewReservation(requestId: string, review: ReservationReview): Promise<unknown> | unknown;
+  autoSettleStalled?(maxAgeMs?: number): Promise<Array<{ requestId: string; chargedUnits: number; settledAt: number }>> | Array<{ requestId: string; chargedUnits: number; settledAt: number }>;
+  listReservationReviews(): Promise<unknown[]> | unknown[];
+  getReservation(requestId: string): Promise<{ requestId: string; sessionId: string; reservedUnits: number; usedUnits: number | null; status: 'reserved' | 'settled' } | null> | { requestId: string; sessionId: string; reservedUnits: number; usedUnits: number | null; status: 'reserved' | 'settled' } | null;
+  getTransaction(txId: string): Promise<TransactionRecord | null> | TransactionRecord | null;
+  listReservations(): Promise<unknown[]> | unknown[];
+  topupQuota(sessionId: string, amount: number): Promise<SessionRecord> | SessionRecord;
+  suspendSession(sessionId: string): Promise<SessionRecord> | SessionRecord;
+  resumeSession(sessionId: string): Promise<SessionRecord> | SessionRecord;
+  broadcastIntent(sessionId: string, model: string, maxBudget: number): Promise<IntentRecord> | IntentRecord;
+  fillIntent(intentId: string, solverId: string): Promise<IntentRecord> | IntentRecord;
+  listOpenIntents(): Promise<IntentRecord[]> | IntentRecord[];
+  getSolverEarnings(solverId: string): Promise<number> | number;
+  registerSolver(solver: SolverRecord): Promise<SolverRecord> | SolverRecord;
+  getSolver(solverId: string): Promise<SolverRecord | null> | SolverRecord | null;
+  listSolvers(): Promise<SolverRecord[]> | SolverRecord[];
+  setSolverActive(solverId: string, isActive: boolean): Promise<void> | void;
+  listRedemptions(limit?: number): Promise<any[]> | any[];
+  getTransactionHistory(sessionId: string): Promise<TransactionRecord[]> | TransactionRecord[];
+  listRecentTransactions(limit?: number): Promise<TransactionRecord[]> | TransactionRecord[];
+  close(): Promise<void> | void;
+}
+
+export class DecantLedger implements IDecantLedger {
   private db: DatabaseSync;
 
   constructor(dbPath: string = ":memory:") {

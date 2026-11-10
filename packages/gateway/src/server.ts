@@ -13,7 +13,8 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { PublicKey } from "near-api-js";
 import type { AddressInfo } from "node:net";
-import { DecantLedger } from "./db.js";
+import { DecantLedger, type IDecantLedger } from "./db.js";
+import { PgDecantLedger } from "./pg-ledger.js";
 import { DecantCrypto } from "./crypto.js";
 import { DecantComputeEngine } from "./compute-engine.js";
 import { enforceRateLimitDistributed, enforcePayloadSize, getMaxChatPayloadBytes, isPrivateOrLoopbackHost } from "./policy.js";
@@ -22,6 +23,8 @@ import { DecantRedisClient } from "./redis.js";
 export interface GatewayServerOptions {
   port?: number;
   dbPath?: string;
+  databaseUrl?: string;
+  ledger?: IDecantLedger;
   /** Operator credential. If absent, operator-only routes fail closed. */
   adminKey?: string;
   nodeId?: string;
@@ -30,7 +33,7 @@ export interface GatewayServerOptions {
 
 export class DecantGatewayServer {
   public readonly server: Server;
-  public readonly ledger: DecantLedger;
+  public readonly ledger: IDecantLedger;
   public readonly compute: DecantComputeEngine;
   public readonly redis: DecantRedisClient;
   public readonly nodeId: string;
@@ -43,7 +46,14 @@ export class DecantGatewayServer {
   constructor(opts: GatewayServerOptions = {}) {
     this.port = opts.port ?? parseInt(process.env["PORT"] ?? "8080", 10);
     this.databasePath = opts.dbPath ?? process.env["DATABASE_PATH"] ?? ":memory:";
-    this.ledger = new DecantLedger(this.databasePath);
+    if (opts.ledger) {
+      this.ledger = opts.ledger;
+    } else if (opts.databaseUrl || process.env["DATABASE_URL"] || process.env["POSTGRES_URL"]) {
+      const conn = opts.databaseUrl || process.env["DATABASE_URL"] || process.env["POSTGRES_URL"]!;
+      this.ledger = new PgDecantLedger(conn);
+    } else {
+      this.ledger = new DecantLedger(this.databasePath);
+    }
     this.compute = new DecantComputeEngine();
     this.adminKey = opts.adminKey ?? process.env["DECANT_ADMIN_KEY"];
     this.nodeId = opts.nodeId ?? (process.env["NODE_ID"] || "server-1");
@@ -134,7 +144,7 @@ export class DecantGatewayServer {
   }
 
   private async authorizeSession(req: IncomingMessage, res: ServerResponse, sessionId: string, body: string): Promise<boolean> {
-    const session = typeof sessionId === "string" ? this.ledger.getSession(sessionId) : null;
+    const session = typeof sessionId === "string" ? await this.ledger.getSession(sessionId) : null;
     if (!session) {
       this.sendJson(res, 401, { error: "Unauthorized — session is not registered" }, {}, req);
       return false;
@@ -157,6 +167,12 @@ export class DecantGatewayServer {
       return false;
     }
 
+    // Redis fail-closed: if Redis is configured as cluster tier but down, reject
+    if (this.redis.isConfigured() && !this.redis.isConnected()) {
+      this.sendJson(res, 503, { error: "Service Unavailable — distributed replay coordinator is offline" }, {}, req);
+      return false;
+    }
+
     // Distributed replay protection via Redis (if connected)
     if (this.redis.isConnected()) {
       const freshInRedis = await this.redis.claimSignature(signature, 300);
@@ -166,7 +182,7 @@ export class DecantGatewayServer {
       }
     }
 
-    if (!this.ledger.claimSignature(signature, timestamp)) {
+    if (!await this.ledger.claimSignature(signature, timestamp)) {
       this.sendJson(res, 403, { error: "Forbidden — invalid or replayed signature" }, {}, req);
       return false;
     }
@@ -199,7 +215,7 @@ export class DecantGatewayServer {
           status: "healthy",
           nodeId: this.nodeId,
           uptime: process.uptime(),
-          ledger: this.databasePath === ":memory:" ? "sqlite-in-memory" : "sqlite-acid-persistent",
+          ledger: this.ledger instanceof PgDecantLedger ? "postgres-connection-pool" : (this.databasePath === ":memory:" ? "sqlite-in-memory" : "sqlite-acid-persistent"),
           nearSync: "not-connected",
           models: this.compute.models,
           inferenceConfigured: this.compute.configured,
@@ -223,6 +239,7 @@ export class DecantGatewayServer {
         || pathname === "/v1/solvers/register"
         || pathname === "/v1/reservations"
         || pathname === "/v1/reservation-reviews"
+        || pathname === "/v1/reservations/auto-settle"
         || /^\/v1\/reservations\/[^/]+\/review$/.test(pathname)
         || pathname === "/v1/intents"
         || pathname === "/v1/redemptions"
@@ -257,7 +274,7 @@ export class DecantGatewayServer {
         try { PublicKey.fromString(publicKey); }
         catch { this.sendJson(res, 400, { error: "Invalid Ed25519 public key" }, {}, req); return; }
         try {
-          const session = this.ledger.registerSession(sessionId, publicKey, ownerAccountId ?? "", quota);
+          const session = await this.ledger.registerSession(sessionId, publicKey, ownerAccountId ?? "", quota);
           this.sendJson(res, 201, session, {}, req);
         } catch (err: any) {
           this.sendJson(res, 409, { error: err.message }, {}, req);
@@ -271,7 +288,7 @@ export class DecantGatewayServer {
       }
 
       if (pathname === "/v1/sessions" && method === "GET") {
-        const sessions = this.ledger.listSessions();
+        const sessions = await this.ledger.listSessions();
         this.sendJson(res, 200, { sessions }, {}, req);
         return;
       }
@@ -279,13 +296,13 @@ export class DecantGatewayServer {
       if (/^\/v1\/sessions\/[^/]+$/.test(pathname) && method === "GET") {
         const sessionId = decodeURIComponent(pathname.split("/")[3]);
         if (!(await this.authorizeSession(req, res, sessionId, ""))) return;
-        const session = this.ledger.getSession(sessionId);
+        const session = await this.ledger.getSession(sessionId);
         if (!session) {
           this.sendJson(res, 404, { error: `Session '${sessionId}' not found` }, {}, req);
           return;
         }
 
-        const txs = this.ledger.getTransactionHistory(sessionId);
+        const txs = await this.ledger.getTransactionHistory(sessionId);
         this.sendJson(res, 200, { session, transactions: txs }, {}, req);
         return;
       }
@@ -302,14 +319,14 @@ export class DecantGatewayServer {
           return;
         }
 
-        const existing = this.ledger.getSession(sessionId);
+        const existing = await this.ledger.getSession(sessionId);
         if (!existing) {
           this.sendJson(res, 404, { error: `Session '${sessionId}' not found` }, {}, req);
           return;
         }
 
         try {
-          const session = this.ledger.topupQuota(sessionId, body.amount);
+          const session = await this.ledger.topupQuota(sessionId, body.amount);
           this.sendJson(res, 200, session, {}, req);
         } catch (err: any) {
           this.sendJson(res, 400, { error: err.message }, {}, req);
@@ -324,7 +341,7 @@ export class DecantGatewayServer {
         }
         const sessionId = decodeURIComponent(pathname.split("/")[3]);
         try {
-          const session = this.ledger.suspendSession(sessionId);
+          const session = await this.ledger.suspendSession(sessionId);
           this.sendJson(res, 200, { session }, {}, req);
         } catch (err: any) {
           this.sendJson(res, 404, { error: err.message }, {}, req);
@@ -339,7 +356,7 @@ export class DecantGatewayServer {
         }
         const sessionId = decodeURIComponent(pathname.split("/")[3]);
         try {
-          const session = this.ledger.resumeSession(sessionId);
+          const session = await this.ledger.resumeSession(sessionId);
           this.sendJson(res, 200, { session }, {}, req);
         } catch (err: any) {
           this.sendJson(res, 404, { error: err.message }, {}, req);
@@ -348,18 +365,18 @@ export class DecantGatewayServer {
       }
 
       if (pathname === "/v1/transactions" && method === "GET") {
-        const txs = this.ledger.listRecentTransactions(50);
+        const txs = await this.ledger.listRecentTransactions(50);
         this.sendJson(res, 200, { transactions: txs }, {}, req);
         return;
       }
 
       if (pathname === "/v1/reservations" && method === "GET") {
-        this.sendJson(res, 200, { reservations: this.ledger.listReservations() }, {}, req);
+        this.sendJson(res, 200, { reservations: await this.ledger.listReservations() }, {}, req);
         return;
       }
 
       if (pathname === "/v1/reservation-reviews" && method === "GET") {
-        this.sendJson(res, 200, { reviews: this.ledger.listReservationReviews() }, {}, req);
+        this.sendJson(res, 200, { reviews: await this.ledger.listReservationReviews() }, {}, req);
         return;
       }
       if (/^\/v1\/reservations\/[^/]+\/review$/.test(pathname) && method === "POST") {
@@ -368,8 +385,18 @@ export class DecantGatewayServer {
           this.sendJson(res, 409, { error: "Request is still active; do not review it" }, {}, req); return;
         }
         const review = await this.parseJsonBody(req, 4 * 1024);
-        const result = this.ledger.reviewReservation(requestId, review);
+        const result = await this.ledger.reviewReservation(requestId, review);
         this.sendJson(res, 200, { review: result }, {}, req);
+        return;
+      }
+
+      if (pathname === "/v1/reservations/auto-settle" && method === "POST") {
+        const body = await this.parseJsonBody(req, 4 * 1024).catch(() => ({}));
+        const maxAgeMs = typeof body.maxAgeMs === "number" && body.maxAgeMs > 0 ? body.maxAgeMs : undefined;
+        const settled = this.ledger.autoSettleStalled
+          ? await this.ledger.autoSettleStalled(maxAgeMs)
+          : [];
+        this.sendJson(res, 200, { settledCount: settled.length, settled }, {}, req);
         return;
       }
 
@@ -389,7 +416,7 @@ export class DecantGatewayServer {
         }
 
         try {
-          const intent = this.ledger.broadcastIntent(sessionId, model ?? "llama3", maxBudget);
+          const intent = await this.ledger.broadcastIntent(sessionId, model ?? "llama3", maxBudget);
           this.sendJson(res, 201, intent, {}, req);
         } catch (err: any) {
           this.sendJson(res, 400, { error: err.message }, {}, req);
@@ -398,7 +425,7 @@ export class DecantGatewayServer {
       }
 
       if (pathname === "/v1/intents" && method === "GET") {
-        const openIntents = this.ledger.listOpenIntents();
+        const openIntents = await this.ledger.listOpenIntents();
         this.sendJson(res, 200, { intents: openIntents }, {}, req);
         return;
       }
@@ -411,7 +438,7 @@ export class DecantGatewayServer {
           this.sendJson(res, 400, { error: "A solver ID is required" }, {}, req); return;
         }
         try {
-          const intent = this.ledger.fillIntent(intentId, solverId);
+          const intent = await this.ledger.fillIntent(intentId, solverId);
           // Assignment is not proof of completed compute; do not issue rewards here.
           this.sendJson(res, 200, intent, {}, req);
         } catch (err: any) {
@@ -422,7 +449,7 @@ export class DecantGatewayServer {
 
       // ── Compute Providers (Solvers) API Supply ─────────────────────────────
       if (pathname === "/v1/solvers" && method === "GET") {
-        const solvers = this.ledger.listSolvers().map(({ solverId, endpointUrl, modelsSupported, isActive }) =>
+        const solvers = (await this.ledger.listSolvers()).map(({ solverId, endpointUrl, modelsSupported, isActive }) =>
           ({ solverId, endpointUrl, modelsSupported, isActive }));
         this.sendJson(res, 200, { solvers }, {}, req);
         return;
@@ -457,7 +484,7 @@ export class DecantGatewayServer {
           return;
         }
 
-        const solver = this.ledger.registerSolver({
+        const solver = await this.ledger.registerSolver({
           solverId,
           endpointUrl,
           modelsSupported: modelsSupported.map((model: string) => model.trim()),
@@ -475,25 +502,25 @@ export class DecantGatewayServer {
 
       if (/^\/v1\/solvers\/[^/]+\/toggle$/.test(pathname) && method === "POST") {
         const solverId = decodeURIComponent(pathname.split("/")[3]);
-        const solver = this.ledger.getSolver(solverId);
+        const solver = await this.ledger.getSolver(solverId);
         if (!solver) {
           this.sendJson(res, 404, { error: `Solver '${solverId}' not found` }, {}, req);
           return;
         }
         const newStatus = !solver.isActive;
-        this.ledger.setSolverActive(solverId, newStatus);
+        await this.ledger.setSolverActive(solverId, newStatus);
         this.sendJson(res, 200, { solverId, isActive: newStatus }, {}, req);
         return;
       }
 
       if (/^\/v1\/solvers\/[^/]+\/stats$/.test(pathname) && method === "GET") {
         const solverId = decodeURIComponent(pathname.split("/")[3]);
-        const solver = this.ledger.getSolver(solverId);
+        const solver = await this.ledger.getSolver(solverId);
         if (!solver) {
           this.sendJson(res, 404, { error: `Solver '${solverId}' not found` }, {}, req);
           return;
         }
-        const earned = this.ledger.getSolverEarnings(solverId);
+        const earned = await this.ledger.getSolverEarnings(solverId);
         this.sendJson(res, 200, {
           solverId,
           isActive: solver.isActive,
@@ -507,7 +534,7 @@ export class DecantGatewayServer {
       // ── Solver Earnings & Compute-to-Value Redemption ───────────────────────
       if (/^\/v1\/solvers\/[^/]+\/earnings$/.test(pathname) && method === "GET") {
         const solverId = decodeURIComponent(pathname.split("/")[3]);
-        const earned = this.ledger.getSolverEarnings(solverId);
+        const earned = await this.ledger.getSolverEarnings(solverId);
         this.sendJson(res, 200, {
           solverId,
           earnedCredits: earned,
@@ -527,7 +554,7 @@ export class DecantGatewayServer {
       }
 
       if (pathname === "/v1/redemptions" && method === "GET") {
-        const redemptions = this.ledger.listRedemptions(50).map(record => ({
+        const redemptions = (await this.ledger.listRedemptions(50)).map(record => ({
           ...record, status: "Unverified", transferConfirmed: false,
         }));
         this.sendJson(res, 200, { redemptions }, {}, req);
@@ -552,17 +579,17 @@ export class DecantGatewayServer {
         if (!(await this.authorizeSession(req, res, sessionId, rawBody))) return;
         if (!(await enforceRateLimitDistributed(req, res, this.redis))) return;
 
-        const session = this.ledger.getSession(sessionId)!;
+        const session = (await this.ledger.getSession(sessionId))!;
 
         // 3. Early Idempotency Check — exact replay of settled transactions returns cached result without re-computation
         const idempotencyKey = (req.headers["idempotency-key"] || req.headers["x-idempotency-key"]) as string | undefined;
         let requestId = randomUUID();
         if (idempotencyKey && typeof idempotencyKey === "string" && idempotencyKey.trim().length > 0 && idempotencyKey.trim().length <= 128) {
           requestId = idempotencyKey.trim();
-          const existingRes = this.ledger.getReservation(requestId);
+          const existingRes = await this.ledger.getReservation(requestId);
           if (existingRes) {
             if (existingRes.status === "settled") {
-              const tx = this.ledger.getTransaction(requestId);
+              const tx = await this.ledger.getTransaction(requestId);
               this.sendJson(res, 200, {
                 id: requestId,
                 object: "chat.completion",
@@ -601,7 +628,7 @@ export class DecantGatewayServer {
           this.sendJson(res, 400, { error: "Requested model is not enabled on this gateway" }, {}, req); return;
         }
         const promptUnits = this.compute.promptUnits(messages);
-        try { this.ledger.reserveInference(requestId, sessionId, promptUnits + maxTokens); }
+        try { await this.ledger.reserveInference(requestId, sessionId, promptUnits + maxTokens); }
         catch {
           this.sendJson(res, 402, { error: "Payment Required — insufficient available compute credit",
             required: promptUnits + maxTokens, remaining: session.remainingQuota }, {}, req); return;
@@ -615,9 +642,9 @@ export class DecantGatewayServer {
         let lastEvent: import("./compute-engine.js").StreamEvent | undefined;
         let output = "";
         let settled = false;
-        const settle = () => {
+        const settle = async () => {
           if (settled) return;
-          this.ledger.settleInference(requestId, lastEvent?.totalTokens ?? 0,
+          await this.ledger.settleInference(requestId, lastEvent?.totalTokens ?? 0,
             lastEvent?.promptTokens ?? 0, lastEvent?.completionTokens ?? 0,
             lastEvent?.model ?? model, lastEvent?.latencyMs ?? 0);
           settled = true;
@@ -635,14 +662,14 @@ export class DecantGatewayServer {
                   "X-Accel-Buffering": "no",
                   "X-Decant-Session": sessionId,
                   "X-Decant-Node-Id": this.nodeId,
-                  "X-Decant-Quota-Remaining": this.ledger.getSession(sessionId)!.remainingQuota.toString() });
+                  "X-Decant-Quota-Remaining": ((await this.ledger.getSession(sessionId))?.remainingQuota ?? 0).toString() });
                 res.write(`data: ${JSON.stringify({ id: requestId, object: "chat.completion.chunk",
                   model: event.model, choices: [{ index: 0, delta: { content: event.token }, finish_reason: null }] })}\n\n`);
               }
             }
           }
           if (!lastEvent?.isComplete) throw new Error("Inference did not complete");
-          settle();
+          await settle();
           if (streaming) {
             res.write(`data: ${JSON.stringify({ id: requestId, object: "chat.completion.chunk",
               model: lastEvent.model, choices: [], usage: { credit_units: lastEvent.totalTokens,
@@ -656,7 +683,7 @@ export class DecantGatewayServer {
           }
         } catch (error: any) {
           console.error('[gateway] inference error:', error);
-          try { settle(); } catch {
+          try { await settle(); } catch {
             if (res.headersSent) res.destroy();
             else this.sendJson(res, 500, { error: "Settlement requires operator review", requestId }, {}, req);
             return;
@@ -687,6 +714,9 @@ export class DecantGatewayServer {
   }
 
   public async start(host: string = "127.0.0.1"): Promise<number> {
+    if (typeof (this.ledger as any).initSchema === "function") {
+      await (this.ledger as any).initSchema();
+    }
     return new Promise((resolve, reject) => {
       this.server.listen(this.port, host, () => {
         const address = this.server.address() as AddressInfo;
@@ -703,9 +733,9 @@ export class DecantGatewayServer {
     if (typeof (this.server as any).closeAllConnections === "function") {
       (this.server as any).closeAllConnections();
     }
+    await this.ledger.close();
     return new Promise((resolve, reject) => {
       this.server.close((err) => (err ? reject(err) : resolve()));
-      this.ledger.close();
     });
   }
 }

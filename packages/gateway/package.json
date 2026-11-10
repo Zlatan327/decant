@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/proxy.ts",
-    "test": "node --import tsx --test __tests__/*.ts",
+    "test": "node --import tsx --test --test-concurrency=1 __tests__/*.ts",
     "test:prod": "node --import tsx --test __tests__/production.ts",
     "test:security": "node --import tsx --test __tests__/security.ts",
     "test:recovery": "node --import tsx --test __tests__/recovery.ts",
@@ -15,11 +15,14 @@
   },
   "dependencies": {
     "@google/genai": "^2.29.1",
+    "@types/pg": "^8.23.1",
     "dotenv": "^16.4.7",
-    "near-api-js": "^7.4.0"
+    "near-api-js": "^7.4.0",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "tsx": "^4.19.0"
+    "pg-mem": "^3.0.14",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
   }
 }
