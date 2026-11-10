@@ -1,11 +1,10 @@
 /**
  * policy.ts — Deterministic structural checks for the Decant gateway.
  *
- * Phase 1: Session-key authentication only.
- * Phase 2: Adds token-bucket rate limiter and payload size constraints.
- *
- * RULE: No LLM inference, no probabilistic checks — every decision is
- *       a pure function of the request bytes.
+ * Enforces:
+ *   - Payload size caps (4KB default for intents/registration, 512KB for agent chat completions)
+ *   - Token-bucket rate limits per session ID
+ *   - SSRF protection against private, loopback, and cloud metadata endpoints
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -21,12 +20,21 @@ export interface TokenBucket {
 const buckets = new Map<string, TokenBucket>();
 
 export function getMaxPayloadBytes(): number {
+  const envVal = process.env["DECANT_MAX_PAYLOAD_BYTES"];
+  if (envVal) {
+    const parsed = parseInt(envVal, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return 4 * 1024; // 4 KB default for metadata & intents
+}
+
+export function getMaxChatPayloadBytes(): number {
   const envVal = process.env["DECANT_MAX_CHAT_BODY_BYTES"];
   if (envVal) {
     const parsed = parseInt(envVal, 10);
     if (!Number.isNaN(parsed) && parsed > 0) return parsed;
   }
-  return 4 * 1024; // 4 KB default
+  return 512 * 1024; // 512 KB default for agent chat completions & tool contexts
 }
 
 export function getRateLimitMax(): number {
@@ -45,6 +53,21 @@ export function getRateLimitWindowMs(): number {
     if (!Number.isNaN(parsed) && parsed > 0) return parsed;
   }
   return 10_000;
+}
+
+/**
+ * SSRF validation: checks if an IP/hostname is a private, loopback, or cloud-metadata address.
+ */
+export function isPrivateOrLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().trim();
+  if (host === "localhost" || host === "::1" || host === "0.0.0.0") return true;
+  if (/^127\.\d+\.\d+\.\d+$/.test(host)) return true;
+  if (/^10\.\d+\.\d+\.\d+$/.test(host)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(host)) return true;
+  if (/^192\.168\.\d+\.\d+$/.test(host)) return true;
+  if (/^169\.254\.\d+\.\d+$/.test(host)) return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(host) || /^fe80:/i.test(host)) return true;
+  return false;
 }
 
 /**

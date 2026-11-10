@@ -358,6 +358,33 @@ export class DecantLedger {
     return this.db.prepare("SELECT * FROM reservation_reviews ORDER BY reviewed_at DESC LIMIT 100").all();
   }
 
+  public getReservation(requestId: string): { requestId: string; sessionId: string; reservedUnits: number; usedUnits: number | null; status: 'reserved' | 'settled' } | null {
+    const row = this.db.prepare('SELECT * FROM inference_reservations WHERE request_id = ?').get(requestId) as any;
+    if (!row) return null;
+    return {
+      requestId: row.request_id,
+      sessionId: row.session_id,
+      reservedUnits: Number(row.reserved_units),
+      usedUnits: row.used_units != null ? Number(row.used_units) : null,
+      status: row.status,
+    };
+  }
+
+  public getTransaction(txId: string): TransactionRecord | null {
+    const r = this.db.prepare('SELECT * FROM transactions WHERE tx_id = ?').get(txId) as any;
+    if (!r) return null;
+    return {
+      txId: r.tx_id,
+      sessionId: r.session_id,
+      promptTokens: Number(r.prompt_tokens),
+      completionTokens: Number(r.completion_tokens),
+      costUnits: Number(r.cost_units),
+      model: r.model,
+      upstreamLatencyMs: Number(r.upstream_latency_ms),
+      timestamp: Number(r.timestamp),
+    };
+  }
+
   public listReservations(): unknown[] {
     return this.db.prepare("SELECT * FROM inference_reservations WHERE status = 'reserved' ORDER BY created_at").all();
   }

@@ -16,7 +16,7 @@ import type { AddressInfo } from "node:net";
 import { DecantLedger } from "./db.js";
 import { DecantCrypto } from "./crypto.js";
 import { DecantComputeEngine } from "./compute-engine.js";
-import { enforceRateLimitDistributed, enforcePayloadSize } from "./policy.js";
+import { enforceRateLimitDistributed, enforcePayloadSize, getMaxChatPayloadBytes, isPrivateOrLoopbackHost } from "./policy.js";
 import { DecantRedisClient } from "./redis.js";
 
 export interface GatewayServerOptions {
@@ -159,7 +159,7 @@ export class DecantGatewayServer {
 
     // Distributed replay protection via Redis (if connected)
     if (this.redis.isConnected()) {
-      const freshInRedis = await this.redis.claimSignature(signature, 60);
+      const freshInRedis = await this.redis.claimSignature(signature, 300);
       if (!freshInRedis) {
         this.sendJson(res, 403, { error: "Forbidden — invalid or replayed signature" }, {}, req);
         return false;
@@ -452,6 +452,11 @@ export class DecantGatewayServer {
           return;
         }
 
+        if (process.env.NODE_ENV === "production" && isPrivateOrLoopbackHost(endpoint.hostname || "")) {
+          this.sendJson(res, 400, { error: "SSRF violation: private or link-local endpoints are prohibited" }, {}, req);
+          return;
+        }
+
         const solver = this.ledger.registerSolver({
           solverId,
           endpointUrl,
@@ -539,14 +544,40 @@ export class DecantGatewayServer {
         }
 
         // 2. Request Policy Guards
-        if (!enforcePayloadSize(req, res)) return;
+        const maxChatBytes = getMaxChatPayloadBytes();
+        if (!enforcePayloadSize(req, res, maxChatBytes)) return;
 
-        const rawBody = await this.parseBody(req, 4 * 1024);
+        const rawBody = await this.parseBody(req, maxChatBytes);
 
         if (!(await this.authorizeSession(req, res, sessionId, rawBody))) return;
         if (!(await enforceRateLimitDistributed(req, res, this.redis))) return;
 
         const session = this.ledger.getSession(sessionId)!;
+
+        // 3. Early Idempotency Check — exact replay of settled transactions returns cached result without re-computation
+        const idempotencyKey = (req.headers["idempotency-key"] || req.headers["x-idempotency-key"]) as string | undefined;
+        let requestId = randomUUID();
+        if (idempotencyKey && typeof idempotencyKey === "string" && idempotencyKey.trim().length > 0 && idempotencyKey.trim().length <= 128) {
+          requestId = idempotencyKey.trim();
+          const existingRes = this.ledger.getReservation(requestId);
+          if (existingRes) {
+            if (existingRes.status === "settled") {
+              const tx = this.ledger.getTransaction(requestId);
+              this.sendJson(res, 200, {
+                id: requestId,
+                object: "chat.completion",
+                model: tx?.model || "cached-settled",
+                choices: [{ index: 0, message: { role: "assistant", content: "[Idempotent replay: request already settled]" }, finish_reason: "stop" }],
+                usage: { credit_units: existingRes.usedUnits ?? 0, idempotent: true },
+              }, {}, req);
+              return;
+            } else if (existingRes.status === "reserved") {
+              this.sendJson(res, 409, { error: "Conflict — an inference request with this idempotency key is already in flight", requestId }, {}, req);
+              return;
+            }
+          }
+        }
+
         let payload: any;
         try { payload = JSON.parse(rawBody || "{}"); }
         catch { this.sendJson(res, 400, { error: "Malformed JSON payload" }, {}, req); return; }
@@ -570,7 +601,6 @@ export class DecantGatewayServer {
           this.sendJson(res, 400, { error: "Requested model is not enabled on this gateway" }, {}, req); return;
         }
         const promptUnits = this.compute.promptUnits(messages);
-        const requestId = randomUUID();
         try { this.ledger.reserveInference(requestId, sessionId, promptUnits + maxTokens); }
         catch {
           this.sendJson(res, 402, { error: "Payment Required — insufficient available compute credit",
@@ -616,7 +646,7 @@ export class DecantGatewayServer {
           if (streaming) {
             res.write(`data: ${JSON.stringify({ id: requestId, object: "chat.completion.chunk",
               model: lastEvent.model, choices: [], usage: { credit_units: lastEvent.totalTokens,
-                metering: "ceil(characters / 4)" } })}\n\n`);
+                metering: lastEvent?.usageMetadata ? "gemini-usage-metadata" : "ceil(characters / 4)" } })}\n\n`);
             res.write("data: [DONE]\n\n"); res.end();
           } else {
             this.sendJson(res, 200, { id: requestId, object: "chat.completion", model: lastEvent.model,
