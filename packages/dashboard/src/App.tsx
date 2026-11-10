@@ -12,7 +12,26 @@ import { TransactionAudit } from './components/TransactionAudit';
 import { AuthModal } from './components/AuthModal';
 import { NearContractInspector } from './components/NearContractInspector';
 import { ProviderStudioView } from './components/ProviderStudioView';
+import { HonestBadge } from './components/HonestBadge';
+import { QuickstartGuide } from './components/QuickstartGuide';
 import type { DashboardSection } from './domain/navigation';
+
+export type Persona = 'developer' | 'provider' | 'operator';
+
+const PERSONA_CONFIG: Record<Persona, { label: string; sections: DashboardSection[] }> = {
+  developer: {
+    label: 'Developer',
+    sections: ['overview', 'request', 'identity', 'guide'],
+  },
+  provider: {
+    label: 'Compute Provider',
+    sections: ['provider', 'routing'],
+  },
+  operator: {
+    label: 'Gateway Operator',
+    sections: ['evidence', 'accounting', 'identity'],
+  },
+};
 
 import { useDashboardData } from './hooks/useDashboardData';
 import { targetAttributes } from './components/targets';
@@ -41,7 +60,11 @@ export function App() {
   const [isOperator, setIsOperator] = useState(false);
 
   const [now, setNow] = useState(() => Date.now());
+  const [selectedPersona, setSelectedPersona] = useState<Persona>('developer');
   const [activeSection, selectSection] = useState<DashboardSection>('overview');
+
+  const sessionsList = dashboard.state.sessions.data ?? [];
+  const totalAvailableQuota = sessionsList.reduce((acc, s) => acc + (s.remainingQuota || 0), 0);
   const setActiveSection = (section: DashboardSection) => {
     selectSection(section);
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -257,8 +280,60 @@ export function App() {
               </a>
             </div>
 
-            <span className="workspace-location">Workspace / {categories.find(category => category.id === activeSection)?.label ?? CATEGORY_HEADERS[activeSection]?.headline}</span>
+            <div className="persona-nav" style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.04)', padding: '3px', borderRadius: '6px' }}>
+              {(['developer', 'provider', 'operator'] as const).map((p) => {
+                const isActive = selectedPersona === p;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                      color: isActive ? '#fff' : 'rgba(255,255,255,0.5)',
+                    }}
+                    onClick={() => {
+                      setSelectedPersona(p);
+                      const allowed = PERSONA_CONFIG[p].sections;
+                      if (!allowed.includes(activeSection)) {
+                        setActiveSection(allowed[0]);
+                      }
+                    }}
+                  >
+                    {PERSONA_CONFIG[p].label}
+                  </button>
+                );
+              })}
+            </div>
+
             <div className="topbar__meta">
+              <div
+                className="money-chip mono"
+                title="Allocated compute credit across agent sessions"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  fontSize: '11px',
+                }}
+              >
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>QUOTA:</span>
+                <strong>{totalAvailableQuota.toLocaleString()}</strong>
+                <span style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  (~${(totalAvailableQuota * 0.00001).toFixed(2)})
+                </span>
+                <HonestBadge type="Testnet" size="sm" />
+              </div>
+
               <button type="button" className="button button--quiet operator-access" onClick={() => setIsAuthModalOpen(true)}>
                 {isOperator ? 'Operator settings' : 'Operator access'}
               </button>
@@ -308,6 +383,14 @@ export function App() {
             {/* ── Section 1: Overview ── */}
             {activeSection === 'overview' && (
               <div className="workspace-view" key="overview">
+                <QuickstartGuide
+                  sessions={sessionsList}
+                  selectedSessionId={dashboard.state.selectedSessionId}
+                  onSelectSession={dashboard.selectSession}
+                  onGoToInference={() => setActiveSection('request')}
+                  onGoToSessions={() => setActiveSection('identity')}
+                />
+
                 <HealthBar
                   resource={dashboard.state.health}
                   now={now}
